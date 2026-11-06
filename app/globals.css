@@ -6,7 +6,8 @@
 * { box-sizing: border-box; }
 body {
   margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
-  background: linear-gradient(180deg, #0b0e1a, #141a2e 60%, #0b0e1a);
+  background: linear-gradient(135deg, #020617 0%, #0a2a6b 35%, #0369a1 65%, #0891b2 100%);
+  background-attachment: fixed;
   color: var(--text); min-height: 100vh;
 }
 a { color: var(--accent); }
@@ -94,3 +95,65 @@ table.data th { color: var(--muted); font-size: 13px; }
 .flex-row > * { flex: 1 1 160px; }
 .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
 .toolbar input, .toolbar select { width: auto; flex: 1 1 160px; }
+
+/* ---- Trang chủ: nền xanh blur trôi nhẹ, phong cách iOS 27 Liquid Glass ---- */
+.home { position: relative; }
+.home-blobs {
+  position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 0;
+}
+.blob {
+  position: absolute; border-radius: 50%;
+  filter: blur(70px); -webkit-filter: blur(70px); opacity: 0.65;
+  animation: blob-drift 18s ease-in-out infinite alternate;
+}
+.blob-1 { width: 480px; height: 480px; left: -120px; top: -80px; background: #2563eb; }
+.blob-2 { width: 420px; height: 420px; right: -100px; top: 12%; background: #06b6d4; animation-delay: -6s; }
+.blob-3 { width: 380px; height: 380px; left: 18%; bottom: -140px; background: #3b82f6; animation-delay: -3s; }
+.blob-4 { width: 300px; height: 300px; right: 22%; bottom: 8%; background: #0ea5e9; animation-delay: -9s; }
+@keyframes blob-drift {
+  from { transform: translate(0, 0) scale(1); }
+  to { transform: translate(48px, -36px) scale(1.12); }
+}
+.home-hero, .home-grid { position: relative; z-index: 1; }
+.home-hero { text-align: center; padding: 28px 12px 8px; }
+.home-logo {
+  width: 72px; height: 72px; margin: 0 auto 12px; display: grid; place-items: center;
+  font-size: 34px; border-radius: 24px;
+  background: rgba(255, 255, 255, 0.16); border: 1px solid rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 12px 40px rgba(2, 132, 199, 0.45);
+}
+.home-title {
+  font-size: 36px; font-weight: 800; letter-spacing: -0.5px; margin: 0 0 8px;
+  background: linear-gradient(90deg, #fff, #bae6fd); -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: #fff;
+}
+.home-tagline { color: rgba(255, 255, 255, 0.85); margin: 0 auto; max-width: 640px; line-height: 1.6; }
+.home-grid {
+  display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 20px;
+  max-width: 980px; margin: 24px auto 0; align-items: start;
+}
+.home-auth { padding: 24px; }
+.home-auth h1 { font-size: 24px; }
+.home-features { padding: 24px; }
+.home-features h2 { margin: 0 0 12px; font-size: 20px; }
+.feature-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.feature-list li {
+  display: flex; gap: 12px; align-items: flex-start; line-height: 1.6;
+  padding: 12px; border-radius: 16px; background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.feature-icon {
+  flex: 0 0 40px; width: 40px; height: 40px; display: grid; place-items: center;
+  font-size: 20px; border-radius: 12px;
+  background: rgba(14, 165, 233, 0.25); border: 1px solid rgba(255, 255, 255, 0.2);
+}
+@media (max-width: 760px) {
+  .home-grid { grid-template-columns: 1fr; }
+  .home-title { font-size: 28px; }
+  .blob-1 { width: 320px; height: 320px; }
+  .blob-2 { width: 280px; height: 280px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .blob { animation: none; }
+}

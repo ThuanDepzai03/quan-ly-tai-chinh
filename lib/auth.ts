@@ -2,10 +2,20 @@
 // Mật khẩu lưu dạng băm SHA-256 + salt trong localStorage — CHỈ dùng cho bản demo.
 // Bản deploy thật dùng Supabase Auth (xem app/auth/page.tsx).
 import type { AppUser } from './types';
+import type { User as SupabaseUser } from '@supabase/supabase-js';
 import { DEMO_EMAIL, DEMO_PASSWORD } from './demo';
 
+// Key duy nhất lưu phiên đăng nhập của app (cả local lẫn Supabase).
+// Mọi nơi đọc trạng thái đăng nhập đều phải dùng getSessionUser() / key này:
+//  - lib/data.ts useAppData() đọc key này để biết đã đăng nhập hay chưa.
+//  - components/AuthForm.tsx PHẢI ghi key này sau khi Supabase login thành
+//    công (lỗi 06/11/2026: login Supabase thành công — log "Login request
+//    completed" 200 — nhưng AuthForm chỉ router.push('/dashboard') mà không
+//    ghi key này, nên dashboard luôn hiện "Bạn chưa đăng nhập").
+// Supabase tự lưu session riêng của nó (cookie sb-...), nhưng app không đọc
+//  trực tiếp key đó — chỉ đồng bộ từ Supabase session sang key này.
+export const SESSION_KEY = 'qltc-v2-session';
 const USERS_KEY = 'qltc-v2-users';
-const SESSION_KEY = 'qltc-v2-session';
 
 interface StoredUser extends AppUser { pwHash: string; salt: string; }
 
@@ -39,6 +49,36 @@ export function getSessionUser(): AppUser | null {
 export function setSessionUser(user: AppUser | null): void {
   if (user) localStorage.setItem(SESSION_KEY, JSON.stringify(user));
   else localStorage.removeItem(SESSION_KEY);
+}
+
+/**
+ * Chuyển Supabase User -> AppUser (id Supabase = id dùng khắp app).
+ * Tên lấy từ user_metadata.full_name (đặt lúc signUp), fallback sang
+ * phần trước @ của email.
+ */
+export function appUserFromSupabaseUser(sbUser: SupabaseUser): AppUser {
+  const email = sbUser.email ?? '';
+  const metaName =
+    (typeof sbUser.user_metadata?.full_name === 'string' && sbUser.user_metadata.full_name) ||
+    (typeof sbUser.user_metadata?.name === 'string' && sbUser.user_metadata.name) ||
+    '';
+  return {
+    id: sbUser.id,
+    email,
+    name: metaName.trim() || email.split('@')[0] || 'Người dùng',
+  };
+}
+
+/**
+ * Đồng bộ phiên Supabase -> key session duy nhất của app (qltc-v2-session).
+ * Gọi ngay sau signIn/signUp/demo login thành công, TRƯỚC khi chuyển sang
+ * /dashboard. Trả về AppUser đã lưu, hoặc null khi không có Supabase user.
+ */
+export function syncSessionUserFromSupabase(sbUser: SupabaseUser | null): AppUser | null {
+  if (!sbUser) { setSessionUser(null); return null; }
+  const user = appUserFromSupabaseUser(sbUser);
+  setSessionUser(user);
+  return user;
 }
 
 /** Đăng ký local. Trả về lỗi (chuỗi) hoặc null khi thành công. */

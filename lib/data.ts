@@ -9,7 +9,7 @@ import type {
   TaxCircular, TaxPayment, Transaction, TxInput, Wallet, Workspace, WorkspaceMode,
 } from './types';
 import { emptyState, seedDemoState } from './demo';
-import { getSessionUser } from './auth';
+import { getSessionUser, setSessionUser, syncSessionUserFromSupabase } from './auth';
 import { createClient, isSupabaseConfigured } from './supabase/client';
 import { uid } from './utils';
 
@@ -101,22 +101,60 @@ export function useAppData(): AppData {
   const [mode, setMode] = useState<'local' | 'cloud'>('local');
   const stateRef = useRef<AppState | null>(null);
   stateRef.current = state;
+  // Tăng khi Supabase báo session đổi sang user khác (SIGNED_IN) để tải
+  // lại dữ liệu cho đúng user. TOKEN_REFRESHED cùng user thì không tải lại.
+  const [authTick, setAuthTick] = useState(0);
+
+  // Đồng bộ phiên Supabase -> key session duy nhất của app.
+  // Sửa lỗi 06/11/2026: trước đây effect tải dữ liệu chỉ đọc localStorage
+  // (getSessionUser) và thoát ngay khi trống, không bao giờ hỏi Supabase —
+  // trong khi Supabase đã lưu session riêng của nó sau khi login thành công.
+  useEffect(() => {
+    const sb = isSupabaseConfigured() ? createClient() : null;
+    if (!sb) return;
+    const { data: { subscription } } = sb.auth.onAuthStateChange((event, session) => {
+      if (event === 'INITIAL_SESSION') return; // load lần đầu đã xử lý ở effect dưới
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        if (session?.user) {
+          syncSessionUserFromSupabase(session.user);
+          // Chỉ tải lại khi đổi sang user khác, tránh tải lại vô hạn.
+          if (session.user.id !== stateRef.current?.user?.id) setAuthTick((t) => t + 1);
+        }
+      } else if (event === 'SIGNED_OUT') {
+        setSessionUser(null);
+        setState(null);
+        setLoading(false);
+      }
+    });
+    return () => subscription.unsubscribe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const user = getSessionUser();
-      if (!user) { setLoading(false); return; }
+      // 1. Hỏi Supabase session TRƯỚC — đây là nguồn đúng nhất sau khi
+      //    đăng nhập. Nếu có session thì đồng bộ ngay sang key
+      //    qltc-v2-session để mọi nơi (AppShell, Cài đặt...) đều thấy.
+      let user: AppUser | null = null;
+      let hasSupabaseSession = false;
       const sb = isSupabaseConfigured() ? createClient() : null;
       if (sb) {
         try {
           const { data: { session } } = await sb.auth.getSession();
           if (session?.user) {
-            const cloudUser: AppUser = {
-              id: session.user.id,
-              email: session.user.email ?? user.email,
-              name: (session.user.user_metadata?.full_name as string) ?? user.name,
-            };
+            user = syncSessionUserFromSupabase(session.user);
+            hasSupabaseSession = true;
+          }
+        } catch { /* rơi xuống fallback local */ }
+      }
+      // 2. Chỉ khi không có session Supabase mới dùng phiên local/demo.
+      if (!user) user = getSessionUser();
+      if (!user) { if (!cancelled) setLoading(false); return; }
+      if (sb && hasSupabaseSession) {
+        try {
+          // user ở đây chính là user đã đồng bộ từ Supabase session ở trên.
+          const cloudUser: AppUser = user;
             const loaded: Partial<AppState> = { user: cloudUser };
             for (const table of TABLES) {
               const { data } = await sb.from(table).select('*');
@@ -148,7 +186,6 @@ export function useAppData(): AppData {
               setLoading(false);
               return;
             }
-          }
         } catch { /* rơi xuống bản local */ }
       }
       if (!cancelled) {
@@ -158,7 +195,7 @@ export function useAppData(): AppData {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [authTick]);
 
   const update = useCallback((fn: (prev: AppState) => AppState, cloudOps?: Array<() => Promise<unknown>>) => {
     setState((prev) => {
