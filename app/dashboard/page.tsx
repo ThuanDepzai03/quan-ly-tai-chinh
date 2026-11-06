@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import AppShell from '@/components/AppShell';
@@ -33,6 +34,8 @@ export default function Dashboard() {
   const { state } = data;
   const [showTx, setShowTx] = useState(false);
   const [txType, setTxType] = useState<TxType>('income');
+  const [showAllTransactions, setShowAllTransactions] = useState(false);
+  const [showAllWallets, setShowAllWallets] = useState(false);
   const [showWallet, setShowWallet] = useState(false);
   const [editWallet, setEditWallet] = useState<Wallet | null>(null);
   const [confirmDeleteTx, setConfirmDeleteTx] = useState<string | null>(null);
@@ -65,8 +68,10 @@ export default function Dashboard() {
     () => (state?.wallets ?? []).filter((w) => w.workspace_id === wsId), [state, wsId]);
   const txs = useMemo(
     () => (state?.transactions ?? []).filter((t) => t.workspace_id === wsId)
-      .sort((a, b) => b.date.localeCompare(a.date)).slice(0, 20),
+      .sort((a, b) => b.date.localeCompare(a.date)),
     [state, wsId]);
+  const displayedTransactions = showAllTransactions ? txs : txs.slice(0, 5);
+  const displayedWallets = showAllWallets ? wallets : wallets.slice(0, 5);
   const month = monthISO();
   const monthTxs = useMemo(
     () => (state?.transactions ?? []).filter((t) => t.workspace_id === wsId && t.date.startsWith(month)),
@@ -274,7 +279,7 @@ export default function Dashboard() {
           </p>
         ) : wallets.length === 0 ? <p className="muted">Chưa có ví nào.</p> : (
           <div className="row-list">
-            {wallets.map((w) => (
+            {displayedWallets.map((w) => (
               <div key={w.id} className="row-item">
                 <div><b>{w.name}</b><div className="sub">{WALLET_TYPE_LABELS[w.type]}</div></div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -288,6 +293,11 @@ export default function Dashboard() {
             ))}
           </div>
         )}
+        {wallets.length > 5 ? (
+          <button className="btn-ghost btn-small list-expand-button" onClick={() => setShowAllWallets((shown) => !shown)}>
+            {showAllWallets ? 'Thu gọn' : `Xem thêm (${wallets.length - 5})`}
+          </button>
+        ) : null}
       </GlassCard>
 
       <GlassCard title="Giao dịch gần đây" action={
@@ -295,7 +305,7 @@ export default function Dashboard() {
       }>
         {txs.length === 0 ? <p className="muted">Chưa có giao dịch — bấm “Thêm giao dịch” để ghi Thu/Chi đầu tiên.</p> : (
           <div className="row-list">
-            {txs.map((t) => (
+            {displayedTransactions.map((t) => (
               <div key={t.id} className="row-item">
                 <div>
                   <b style={{ color: t.type === 'income' ? '#34c759' : t.type === 'expense' ? '#ff3b30' : '#0a84ff' }}>
@@ -313,6 +323,11 @@ export default function Dashboard() {
             ))}
           </div>
         )}
+        {txs.length > 5 ? (
+          <button className="btn-ghost btn-small list-expand-button" onClick={() => setShowAllTransactions((shown) => !shown)}>
+            {showAllTransactions ? 'Thu gọn' : `Xem thêm (${txs.length - 5})`}
+          </button>
+        ) : null}
       </GlassCard>
 
       <div className="flex-row" style={{ alignItems: 'stretch' }}>
@@ -551,6 +566,8 @@ function DebtImageSlot({ debt }: { debt: Debt }) {
 
   useEffect(() => {
     if (!viewing) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') closeViewer();
       if (event.key === '+' || event.key === '=') changeZoom(zoom + 0.25);
@@ -558,7 +575,10 @@ function DebtImageSlot({ debt }: { debt: Debt }) {
       if (event.key === '0') changeZoom(1);
     }
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, [viewing, zoom]);
 
   return (
@@ -592,7 +612,7 @@ function DebtImageSlot({ debt }: { debt: Debt }) {
       ) : null}
       {error ? <span className="debt-image-error" role="alert">{error}</span> : null}
       {viewing && debt.image ? (
-        <div className="debt-image-viewer" role="dialog" aria-modal="true" aria-label={`Xem ảnh: ${debt.name}`}
+        createPortal(<div className="debt-image-viewer" role="dialog" aria-modal="true" aria-label={`Xem ảnh: ${debt.name}`}
           onClick={closeViewer}>
           <div className="debt-image-viewer-toolbar" onClick={(event) => event.stopPropagation()}>
             <span>{debt.name}</span>
@@ -629,7 +649,7 @@ function DebtImageSlot({ debt }: { debt: Debt }) {
               style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }} />
           </div>
           <span className="debt-image-viewer-hint">Lăn chuột để thu phóng · Kéo ảnh khi đã phóng lớn · Esc để đóng</span>
-        </div>
+        </div>, document.body)
       ) : null}
     </div>
   );
