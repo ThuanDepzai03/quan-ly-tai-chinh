@@ -85,7 +85,7 @@ lib/
                       bán hàng tự trừ tồn + tính lãi, xóa giao dịch hoàn tồn, nhập kho ghi Chi
   supabase/client.ts  createBrowserClient (trả null khi chưa cấu hình env)
   supabase/server.ts  createServerClient cho Server Components
-middleware.ts         Làm mới session Supabase mỗi request
+                      (chưa dùng trong luồng hiện tại; Auth hoạt động qua browser client)
 supabase/schema.sql   16 bảng + RLS + trigger + hàm tax88()
 ```
 
