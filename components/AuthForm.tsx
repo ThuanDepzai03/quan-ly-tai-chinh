@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { SupabaseClient, User as SupabaseUser } from '@supabase/supabase-js';
 import {
@@ -10,18 +10,31 @@ import {
   sendPasswordResetEmail,
 } from '@/lib/supabase/client';
 import { localResetPassword, localSignIn, localSignUp, getSessionUser, setSessionUser, syncSessionUserFromSupabase } from '@/lib/auth';
-import { DEMO_EMAIL, DEMO_PASSWORD } from '@/lib/demo';
+import { DEMO_EMAIL } from '@/lib/demo';
 import { ensureLocalState, seedCloudDemoData } from '@/lib/data';
 import { Field } from '@/components/GlassCard';
 
 type Mode = 'login' | 'register' | 'forgot';
+const REMEMBERED_EMAIL_KEY = 'qltc-remembered-email';
+const AUTH_REQUEST_TIMEOUT_MS = 15_000;
+
+function withAuthTimeout<T>(request: PromiseLike<T>, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  return Promise.race([
+    Promise.resolve(request),
+    new Promise<T>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${label} quá thời gian chờ. Hãy kiểm tra kết nối rồi thử lại.`)), AUTH_REQUEST_TIMEOUT_MS);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
 
 /** Form Đăng nhập / Đăng ký / Quên mật khẩu dùng chung cho trang chủ (/) và trang /auth. */
 export default function AuthForm({ showHomeLink = false }: { showHomeLink?: boolean }) {
   const [mode, setMode] = useState<Mode>('login');
   const [name, setName] = useState('');
-  const [email, setEmail] = useState(DEMO_EMAIL);
-  const [password, setPassword] = useState(DEMO_PASSWORD);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [rememberEmail, setRememberEmail] = useState(false);
   const [confirm, setConfirm] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [withDemo, setWithDemo] = useState(true);
@@ -32,6 +45,27 @@ export default function AuthForm({ showHomeLink = false }: { showHomeLink?: bool
   const [showResend, setShowResend] = useState(false);
   const [resendMsg, setResendMsg] = useState('');
   const cloud = isSupabaseConfigured();
+
+  useEffect(() => {
+    try {
+      const savedEmail = localStorage.getItem(REMEMBERED_EMAIL_KEY);
+      if (savedEmail) {
+        setEmail(savedEmail);
+        setRememberEmail(true);
+      }
+    } catch {
+      setError('Trình duyệt không cho phép lưu email trên thiết bị này.');
+    }
+  }, []);
+
+  function saveRememberedEmail(value: string) {
+    try {
+      if (rememberEmail) localStorage.setItem(REMEMBERED_EMAIL_KEY, value.trim());
+      else localStorage.removeItem(REMEMBERED_EMAIL_KEY);
+    } catch {
+      setError('Không lưu được email đăng nhập trên thiết bị này.');
+    }
+  }
 
   // Chuyển sang Dashboard. localStorage.setItem là đồng bộ nên key session
   // đã được ghi xong trước khi trình duyệt tải lại trang /dashboard.
@@ -51,7 +85,7 @@ export default function AuthForm({ showHomeLink = false }: { showHomeLink?: bool
    * được session/user nào — khi đó KHÔNG chuyển trang, báo lỗi rõ ràng.
    */
   async function persistCloudSession(sb: SupabaseClient, fallbackUser: SupabaseUser | null = null): Promise<boolean> {
-    const { data: { session } } = await sb.auth.getSession();
+    const { data: { session } } = await withAuthTimeout(sb.auth.getSession(), 'Kiểm tra phiên Supabase');
     const sbUser = session?.user ?? fallbackUser;
     if (!sbUser) return false;
     const user = syncSessionUserFromSupabase(sbUser);
@@ -139,7 +173,10 @@ export default function AuthForm({ showHomeLink = false }: { showHomeLink?: bool
           setInfo('Đăng ký thành công. Đang chuyển tới Dashboard…');
           goDashboard();
         } else {
-          const { data, error } = await sb.auth.signInWithPassword({ email: email.trim(), password });
+          const { data, error } = await withAuthTimeout(
+            sb.auth.signInWithPassword({ email: email.trim(), password }),
+            'Đăng nhập Supabase',
+          );
           if (error) {
             const t = translateAuthError(error);
             setError(t.message);
@@ -153,6 +190,7 @@ export default function AuthForm({ showHomeLink = false }: { showHomeLink?: bool
             setError('Đăng nhập thành công nhưng chưa lấy được phiên đăng nhập. Hãy thử đăng nhập lại.');
             return;
           }
+          saveRememberedEmail(email);
           goDashboard();
         }
         return;
@@ -168,9 +206,12 @@ export default function AuthForm({ showHomeLink = false }: { showHomeLink?: bool
       } else {
         const { user, error } = await localSignIn(email, password);
         if (error || !user) { setError(error ?? 'Đăng nhập thất bại.'); return; }
+        saveRememberedEmail(email);
         ensureLocalState(user, user.email === DEMO_EMAIL ? true : withDemo);
         goDashboard();
       }
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Không thể kết nối dịch vụ đăng nhập. Vui lòng thử lại.');
     } finally { setBusy(false); }
   }
 
@@ -209,12 +250,12 @@ export default function AuthForm({ showHomeLink = false }: { showHomeLink?: bool
           </Field>
         ) : null}
         <Field label="Email">
-          <input placeholder="email@vidu.vn" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          <input placeholder="email@vidu.vn" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
         </Field>
         <Field label={mode === 'forgot' ? 'Mật khẩu mới' : 'Mật khẩu (tối thiểu 6 ký tự)'}>
           <div style={{ display: 'flex', gap: 8 }}>
             <input
-              placeholder="••••••••" type={showPw ? 'text' : 'password'}
+              placeholder="••••••••" type={showPw ? 'text' : 'password'} autoComplete={mode === 'register' ? 'new-password' : mode === 'forgot' ? 'new-password' : 'current-password'}
               value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6}
             />
             <button type="button" className="btn-ghost" onClick={() => setShowPw((s) => !s)}>
@@ -227,6 +268,19 @@ export default function AuthForm({ showHomeLink = false }: { showHomeLink?: bool
             <input placeholder="••••••••" type={showPw ? 'text' : 'password'} value={confirm}
               onChange={(e) => setConfirm(e.target.value)} required minLength={6} />
           </Field>
+        ) : null}
+        {mode === 'login' ? (
+          <label className="check-row">
+            <input type="checkbox" checked={rememberEmail} onChange={(e) => {
+              const checked = e.target.checked;
+              setRememberEmail(checked);
+              if (!checked) {
+                try { localStorage.removeItem(REMEMBERED_EMAIL_KEY); }
+                catch { setError('Không xóa được email đã ghi nhớ trên thiết bị này.'); }
+              }
+            }} />
+            Ghi nhớ email đăng nhập trên thiết bị này
+          </label>
         ) : null}
         {mode === 'register' ? (
           <label className="check-row">

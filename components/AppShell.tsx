@@ -18,7 +18,7 @@ const NAV = [
 
 /** Khung chung cho các trang đã đăng nhập: header, chuyển workspace, menu. */
 export default function AppShell({ children }: { children: ReactNode }) {
-  const { state, loading, switchWorkspace, currentWorkspace, syncError, clearSyncError } = useAppData();
+  const { state, loading, switchWorkspace, currentWorkspace, syncError, clearSyncError, retryLoad } = useAppData();
   const pathname = usePathname();
   const router = useRouter();
   const [pinLocked, setPinLocked] = useState(false);
@@ -57,7 +57,19 @@ export default function AppShell({ children }: { children: ReactNode }) {
     );
   }
 
-  if (loading) return <main className="glass"><p>Đang tải dữ liệu…</p></main>;
+  if (loading) return <main className="glass" role="status"><p>Đang tải dữ liệu…</p></main>;
+  if (!state && syncError) {
+    return (
+      <main className="glass" role="alert">
+        <h1>Không tải được dữ liệu</h1>
+        <p className="error">{syncError}</p>
+        <div className="flex-row">
+          <button type="button" onClick={retryLoad}>Thử tải lại</button>
+          <Link href="/auth"><button type="button" className="btn-secondary">Đăng nhập lại</button></Link>
+        </div>
+      </main>
+    );
+  }
   if (!state || !state.user) {
     return (
       <main className="glass">
@@ -102,6 +114,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
       {syncError ? (
         <div className="sync-error" role="alert">
           <span>{syncError}</span>
+          <button type="button" className="btn-secondary btn-small" onClick={retryLoad}>
+            Tải lại dữ liệu
+          </button>
           <button type="button" className="btn-ghost btn-small" onClick={clearSyncError} aria-label="Đóng thông báo lỗi">
             Đóng
           </button>

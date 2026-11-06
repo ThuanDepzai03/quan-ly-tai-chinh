@@ -23,6 +23,17 @@ const TABLES = [
   'tax_settings',
 ] as const;
 type TableName = (typeof TABLES)[number];
+const CLOUD_REQUEST_TIMEOUT_MS = 15_000;
+
+function withTimeout<T>(promise: PromiseLike<T>, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  return Promise.race([
+    Promise.resolve(promise),
+    new Promise<T>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${label} quá thời gian chờ ${CLOUD_REQUEST_TIMEOUT_MS / 1000} giây.`)), CLOUD_REQUEST_TIMEOUT_MS);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
 
 const STATE_TO_TABLE: Record<string, TableName> = {
   workspaces: 'workspaces', members: 'members', wallets: 'wallets',
@@ -126,6 +137,7 @@ export interface AppData {
   mode: 'local' | 'cloud';
   syncError: string;
   clearSyncError: () => void;
+  retryLoad: () => void;
   currentWorkspace: Workspace | null;
   switchWorkspace: (id: string) => void;
   saveWorkspace: (input: { id?: string; name: string; mode: WorkspaceMode; tax_circular: TaxCircular; vat_rate?: number; tncn_rate?: number; tndn_rate?: number; mon_bai?: number; tncn_deduction?: number }) => Promise<string | null>;
@@ -192,6 +204,11 @@ function useAppDataState(): AppData {
   // Tăng khi Supabase báo session đổi sang user khác (SIGNED_IN) để tải
   // lại dữ liệu cho đúng user. TOKEN_REFRESHED cùng user thì không tải lại.
   const [authTick, setAuthTick] = useState(0);
+  const retryLoad = useCallback(() => {
+    setSyncError('');
+    setLoading(true);
+    setAuthTick((tick) => tick + 1);
+  }, []);
 
   // Đồng bộ phiên Supabase -> key session duy nhất của app.
   // Sửa lỗi 06/11/2026: trước đây effect tải dữ liệu chỉ đọc localStorage
@@ -229,12 +246,22 @@ function useAppDataState(): AppData {
       const sb = isSupabaseConfigured() ? createClient() : null;
       if (sb) {
         try {
-          const { data: { session } } = await sb.auth.getSession();
+          const { data: { session } } = await withTimeout(sb.auth.getSession(), 'Kết nối xác thực Supabase');
           if (session?.user) {
             user = syncSessionUserFromSupabase(session.user);
             hasSupabaseSession = true;
           }
-        } catch { /* rơi xuống fallback local */ }
+        } catch (error) {
+          if (!cancelled) {
+            const message = error instanceof Error ? error.message : String(error);
+            const savedUser = getSessionUser();
+            setMode('cloud');
+            setState(savedUser ? emptyState(savedUser) : null);
+            setSyncError(`${message} Kiểm tra kết nối Supabase rồi thử lại.`);
+            setLoading(false);
+          }
+          return;
+        }
       }
       // 2. Chỉ khi không có session Supabase mới dùng phiên local/demo.
       if (!user) user = getSessionUser();
@@ -243,12 +270,12 @@ function useAppDataState(): AppData {
         try {
           // user ở đây chính là user đã đồng bộ từ Supabase session ở trên.
           const cloudUser: AppUser = user;
-          const results = await Promise.all(
+          const results = await withTimeout(Promise.all(
             TABLES.map(async (table) => {
               const { data, error } = await sb.from(table).select('*');
               return { table, data: data ?? [], error };
             }),
-          );
+          ), 'Tải dữ liệu từ Supabase');
           const failedQuery = results.find((result) => result.error);
           if (failedQuery?.error) throw new Error(`${failedQuery.table}: ${failedQuery.error.message}`);
           const loaded: Partial<AppState> = { user: cloudUser };
@@ -426,7 +453,7 @@ function useAppDataState(): AppData {
   }, [deleteCloudWorkspaceData, upsertCloudState]);
 
   const api: AppData = {
-    state, loading, mode, syncError, clearSyncError: () => setSyncError(''), currentWorkspace,
+    state, loading, mode, syncError, clearSyncError: () => setSyncError(''), retryLoad, currentWorkspace,
     switchWorkspace: (id) => update((p) => ({ ...p, currentWorkspaceId: id })),
     saveWorkspace: async (input) => {
       const current = stateRef.current;
