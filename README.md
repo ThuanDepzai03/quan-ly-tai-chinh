@@ -1,4 +1,4 @@
-# Quản lý tài chính — Source code đầy đủ (v2)
+# Quản lý tài chính — Source code đầy đủ (v2.1)
 
 Web + APK + iOS • Cá nhân / Hộ kinh doanh–Gia đình / Team–DN nhỏ • TT88/2021 • Kho hàng tính lãi • iOS 27 Liquid Glass (dark mode)
 
@@ -20,8 +20,21 @@ Khi deploy hãy đăng ký tài khoản thật qua Supabase Auth (Email/Google).
 ## 2. Tạo Supabase (theo file PDF hướng dẫn 16 trang)
 1. Tạo Project, Region **Singapore**, lưu Project URL + anon key + service_role key.
 2. Authentication > Providers > Email: bật **Enable email provider**. Lúc test tắt **Confirm email** để đăng nhập nhanh, dùng thật bật lại.
-3. Authentication > URL Configuration: Site URL = domain Vercel sau Bước 3.
+3. Authentication > URL Configuration: Site URL = domain Vercel sau Bước 3 (VD: `https://quan-ly-tai-chinh-sage.vercel.app/`). **Redirect URLs phải chứa đúng domain đang chạy** — thêm `https://quan-ly-tai-chinh-sage.vercel.app/**` và `https://quan-ly-tai-chinh-sage.vercel.app/auth`. Nếu Site URL và Redirect URL lệch nhau (VD: Site là `...-sage.vercel.app` mà Redirect chỉ có `quanlytaichinh.vercel.app`) thì link xác thực / đổi mật khẩu sẽ không quay về đúng app.
 4. SQL Editor: dán toàn bộ `supabase/schema.sql` → Run. Đủ 16 bảng + RLS cho cả 16 bảng + trigger trừ/cộng tồn kho (chặn âm kho) + hàm `tax88()`.
+
+### 2.1. Khắc phục lỗi Confirm email / đăng nhập (v2.1)
+**Triệu chứng user gặp:** bật Confirm email thì không nhận được mail xác thực, đăng ký lại báo `User already registered`, đăng nhập báo `Invalid login credentials` dù mật khẩu đúng, đổi mật khẩu xong vẫn không vào được.
+
+**Nguyên nhân:** tài khoản đã tạo thành công nhưng **chưa bấm link xác thực** nên Supabase chặn đăng nhập — không phải sai mật khẩu. Mail của Supabase Free (SMTP mặc định) gửi chậm, hay vào **Spam / Thư rác / Promotions**, có khi không tới. Đổi mật khẩu cũng không mở được tài khoản chưa confirm.
+
+**Cách sửa (theo thứ tự):**
+1. **Tắt Confirm email lúc test:** Supabase > Authentication > Providers > Email > tắt **Confirm email** > Save. Dùng thật thì bật lại sau.
+2. **Xác nhận tài khoản đã có sẵn:** Supabase > Authentication > Users > tìm email > `...` > **Confirm user** (hoặc Delete user đó rồi đăng ký lại).
+3. **Sửa Redirect URLs** cho khớp domain thật như mục 2.3 ở trên, rồi Save changes.
+4. **Trong app (v2.1 đã sửa):** đăng ký trùng email sẽ hiện “Email này đã đăng ký rồi…” kèm nút **Gửi lại mail xác thực**; đăng nhập tài khoản chưa confirm sẽ hiện “Tài khoản chưa xác thực email…” kèm nút gửi lại mail, thay vì báo chung là sai mật khẩu. Nút này gọi `supabase.auth.resend({ type: 'signup', email })`.
+5. **Quên mật khẩu:** app dùng `resetPasswordForEmail(email, { redirectTo: window.location.origin + '/auth' })` nên link luôn quay về đúng domain đang chạy. Kiểm tra cả Spam, bấm link trong vòng 1 giờ, đặt mật khẩu mới rồi đăng nhập lại bằng mật khẩu mới.
+6. **Lâu dài:** nếu cần mail xác thực tin cậy hơn, cấu hình SMTP riêng ở Authentication > Emails > SMTP Settings (VD: Gmail App Password) thay vì SMTP mặc định của Supabase.
 
 ## 3. Deploy Vercel
 ```bash

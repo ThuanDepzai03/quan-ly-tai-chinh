@@ -548,3 +548,21 @@ export function useAppData(): AppData {
   };
   return api;
 }
+
+// ---------------------------------------------------------------------------
+// Lỗi Auth Supabase — dùng chung cho mọi trang (xem lib/supabase/client.ts).
+// Vấn đề 06/11/2026: bật "Confirm email" thì mail xác thực hay vào Spam /
+// không tới; tài khoản chưa confirm bị chặn đăng nhập ("Invalid login
+// credentials") dù mật khẩu đúng; đăng ký lại báo "User already registered";
+// đổi mật khẩu cũng không mở được tài khoản chưa confirm. Các helper dưới
+// đây phân biệt đúng từng trường hợp để UI báo tiếng Việt rõ ràng + cho
+// gửi lại mail xác thực, thay vì báo chung là "sai mật khẩu".
+// ---------------------------------------------------------------------------
+export {
+  translateAuthError,
+  isAlreadyRegistered,
+  isEmailNotConfirmed,
+  isInvalidLogin,
+  resendConfirmationEmail,
+  sendPasswordResetEmail,
+} from './supabase/client';
