@@ -4,6 +4,11 @@
   --orange: #ff9500; --radius: 24px;
 }
 * { box-sizing: border-box; }
+html {
+  min-height: 100%;
+  background: #070a14;
+  overscroll-behavior-y: none;
+}
 .page-container { max-width: 1080px; margin: 0 auto; padding: 20px 16px 64px; }
 body {
   margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
@@ -11,7 +16,8 @@ body {
      Trang chủ (/) tự phủ nền xanh blur riêng qua .home, không dùng nền này. */
   background: linear-gradient(180deg, #070a14 0%, #0b0e1a 45%, #0d1526 100%);
   background-attachment: fixed;
-  color: var(--text); min-height: 100vh;
+  color: var(--text); min-height: 100vh; min-height: 100dvh;
+  overscroll-behavior-y: none;
 }
 .site-footer {
   display: flex; justify-content: center;
@@ -123,6 +129,7 @@ select option { color: #101828; background: #fff; }
   .tabbar a .tab-label { font-size: 10px; }
 }
 @media (max-width: 600px) {
+  body { background-attachment: scroll; }
   .page-container {
     padding: max(8px, env(safe-area-inset-top, 0px)) 12px 8px;
   }
