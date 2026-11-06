@@ -25,6 +25,7 @@ export default function CaiDat() {
   const [wsMonBai, setWsMonBai] = useState('1000000');
   const [wsDeduction, setWsDeduction] = useState('11000000');
   const [showWsForm, setShowWsForm] = useState(false);
+  const [savingWorkspace, setSavingWorkspace] = useState(false);
   const [editingWsId, setEditingWsId] = useState<string | null>(null);
   const [msg, setMsg] = useState('');
   const [catName, setCatName] = useState('');
@@ -66,17 +67,25 @@ export default function CaiDat() {
     setShowWsForm(true);
   }
 
-  function saveWs(e: React.FormEvent) {
+  async function saveWs(e: React.FormEvent) {
     e.preventDefault();
     if (!wsName.trim()) { setMsg('Vui lòng nhập tên không gian.'); return; }
-    data.saveWorkspace({
-      id: editingWsId ?? undefined, name: wsName.trim(), mode: wsMode, tax_circular: wsCircular,
-      vat_rate: Number(wsVat) || 0, tncn_rate: Number(wsTncn) || 0,
-      tndn_rate: Number(wsTndn) || 0, mon_bai: Number(wsMonBai) || 0,
-      tncn_deduction: Number(wsDeduction) || 0,
-    });
-    setShowWsForm(false);
-    setMsg(editingWsId ? 'Đã cập nhật không gian.' : 'Đã tạo không gian mới và chuyển sang đó.');
+    setSavingWorkspace(true);
+    try {
+      const error = await data.saveWorkspace({
+        id: editingWsId ?? undefined, name: wsName.trim(), mode: wsMode, tax_circular: wsCircular,
+        vat_rate: Number(wsVat) || 0, tncn_rate: Number(wsTncn) || 0,
+        tndn_rate: Number(wsTndn) || 0, mon_bai: Number(wsMonBai) || 0,
+        tncn_deduction: Number(wsDeduction) || 0,
+      });
+      if (error) { setMsg(error); return; }
+      setShowWsForm(false);
+      setMsg(editingWsId ? 'Đã cập nhật không gian.' : 'Đã tạo và lưu không gian mới.');
+    } catch (error) {
+      setMsg(`Không kết nối được Supabase để lưu không gian: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setSavingWorkspace(false);
+    }
   }
 
   async function changePassword(e: React.FormEvent) {
@@ -440,7 +449,9 @@ export default function CaiDat() {
             <Field label="Giảm trừ gia cảnh TNCN (đ/tháng)">
               <input type="number" min={0} value={wsDeduction} onChange={(e) => setWsDeduction(e.target.value)} />
             </Field>
-            <button type="submit">{editingWsId ? 'Lưu thay đổi' : 'Tạo không gian'}</button>
+            <button type="submit" disabled={savingWorkspace}>
+              {savingWorkspace ? 'Đang lưu…' : editingWsId ? 'Lưu thay đổi' : 'Tạo không gian'}
+            </button>
           </form>
         </Modal>
       ) : null}

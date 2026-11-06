@@ -123,7 +123,7 @@ export interface AppData {
   mode: 'local' | 'cloud';
   currentWorkspace: Workspace | null;
   switchWorkspace: (id: string) => void;
-  saveWorkspace: (input: { id?: string; name: string; mode: WorkspaceMode; tax_circular: TaxCircular; vat_rate?: number; tncn_rate?: number; tndn_rate?: number; mon_bai?: number; tncn_deduction?: number }) => void;
+  saveWorkspace: (input: { id?: string; name: string; mode: WorkspaceMode; tax_circular: TaxCircular; vat_rate?: number; tncn_rate?: number; tndn_rate?: number; mon_bai?: number; tncn_deduction?: number }) => Promise<string | null>;
   saveMember: (input: { id?: string; email: string; name: string; role: Member['role'] }) => void;
   deleteMember: (id: string) => string | null;
   deleteWorkspace: (id: string) => string | null;
@@ -379,12 +379,16 @@ export function useAppData(): AppData {
   const api: AppData = {
     state, loading, mode, currentWorkspace,
     switchWorkspace: (id) => update((p) => ({ ...p, currentWorkspaceId: id })),
-    saveWorkspace: (input) => {
-      const user = stateRef.current?.user; if (!user) return;
+    saveWorkspace: async (input) => {
+      const current = stateRef.current;
+      const user = current?.user;
+      if (!current || !user) return 'Chưa đăng nhập hoặc dữ liệu tài khoản chưa tải xong.';
+      let workspace: Workspace;
       if (input.id) {
-        const prevWs = stateRef.current?.workspaces.find((w) => w.id === input.id);
-        const merged: Workspace = {
-          ...(prevWs as Workspace),
+        const prevWs = current.workspaces.find((w) => w.id === input.id);
+        if (!prevWs) return 'Không tìm thấy không gian cần cập nhật.';
+        workspace = {
+          ...prevWs,
           name: input.name, mode: input.mode, tax_circular: input.tax_circular,
           vat_rate: input.vat_rate ?? prevWs?.vat_rate ?? 0.01,
           tncn_rate: input.tncn_rate ?? prevWs?.tncn_rate ?? 0.005,
@@ -392,10 +396,8 @@ export function useAppData(): AppData {
           mon_bai: input.mon_bai ?? prevWs?.mon_bai ?? 1000000,
           tncn_deduction: input.tncn_deduction ?? prevWs?.tncn_deduction ?? 11000000,
         };
-        update((pr) => ({ ...pr, workspaces: pr.workspaces.map((w) => (w.id === input.id ? merged : w)) }),
-          [cloudUpsert('workspaces', merged as unknown as Record<string, unknown>)]);
       } else {
-        const ws: Workspace = {
+        workspace = {
           id: uid(), owner_id: user.id, name: input.name, mode: input.mode,
           tax_circular: input.tax_circular,
           vat_rate: input.vat_rate ?? 0.01, tncn_rate: input.tncn_rate ?? 0.005,
@@ -403,10 +405,37 @@ export function useAppData(): AppData {
           tncn_deduction: input.tncn_deduction ?? 11000000,
           created_at: new Date().toISOString(),
         };
-        const member: Member = { id: uid(), workspace_id: ws.id, user_id: user.id, role: 'owner', email: user.email, name: user.name };
-        update((pr) => ({ ...pr, workspaces: [...pr.workspaces, ws], members: [...pr.members, member], currentWorkspaceId: ws.id }),
-          [cloudUpsert('workspaces', ws as unknown as Record<string, unknown>)]);
       }
+      if (modeRef.current === 'cloud') {
+        const sb = createClient();
+        if (!sb) return 'Chưa cấu hình kết nối Supabase.';
+        const { error } = await sb.from('workspaces').upsert(workspace);
+        if (error) {
+          const message = error.message.toLowerCase();
+          if (message.includes('tncn_deduction') && (message.includes('column') || message.includes('schema cache'))) {
+            return 'Cơ sở dữ liệu Supabase đang thiếu cột tncn_deduction. Hãy chạy lại file supabase/schema.sql trong Supabase SQL Editor rồi thử lưu lại.';
+          }
+          return `Không lưu được không gian lên Supabase: ${error.message}`;
+        }
+      }
+      if (input.id) {
+        update((pr) => ({
+          ...pr,
+          workspaces: pr.workspaces.map((w) => (w.id === input.id ? workspace : w)),
+        }));
+      } else {
+        const member: Member = {
+          id: uid(), workspace_id: workspace.id, user_id: user.id,
+          role: 'owner', email: user.email, name: user.name,
+        };
+        update((pr) => ({
+          ...pr,
+          workspaces: [...pr.workspaces, workspace],
+          members: [...pr.members, member],
+          currentWorkspaceId: workspace.id,
+        }));
+      }
+      return null;
     },
     saveMember: (input) => {
       const pr = stateRef.current; if (!pr || !pr.currentWorkspaceId) return;

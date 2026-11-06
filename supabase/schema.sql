@@ -24,6 +24,7 @@ create table if not exists workspaces (
   tncn_rate numeric not null default 0.005,
   tndn_rate numeric not null default 0.20,
   mon_bai numeric not null default 1000000,
+  tncn_deduction numeric not null default 11000000,
   created_at timestamptz default now()
 );
 create table if not exists members (
