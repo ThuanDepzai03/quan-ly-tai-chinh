@@ -1,0 +1,1 @@
+export default function GlassCard({title,children}:{title:string;children:React.ReactNode}){return(<section className="glass" style={{margin:'12px 0'}}><h2 style={{marginTop:0}}>{title}</h2>{children}</section>)}
