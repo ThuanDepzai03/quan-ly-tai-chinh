@@ -47,7 +47,7 @@ export interface Goal {
   saved: number; deadline?: string | null;
 }
 export interface DebtPayment {
-  id: string; amount: number; created_at: string; note?: string | null;
+  id: string; type?: 'increase' | 'payment'; amount: number; created_at: string; note?: string | null;
 }
 export interface Debt {
   id: string; workspace_id: string; name: string; kind: DebtKind;

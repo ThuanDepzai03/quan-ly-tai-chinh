@@ -193,6 +193,7 @@ export interface AppData {
     start_date?: string | null; due_date?: string | null;
   }) => Promise<string | null>;
   payDebt: (id: string, amount: number, note?: string) => Promise<string | null>;
+  increaseDebt: (id: string, amount: number, note?: string) => Promise<string | null>;
   deleteDebt: (id: string) => void;
   saveReminder: (input: { id?: string; title: string; amount?: number | null; next_date: string; frequency: Reminder['frequency'] }) => Promise<string | null>;
   /** Đánh dấu nhắc đã xử lý: dời sang kỳ tiếp; nếu opts.createExpense thì
@@ -794,12 +795,25 @@ function useAppDataState(): AppData {
       if (amount > debt.amount - debt.paid) return Promise.resolve('Số tiền vượt quá khoản còn lại.');
       const paymentHistory = [
         ...(debt.payment_history ?? []),
-        { id: uid(), amount, created_at: new Date().toISOString(), note: note.trim() || null },
+        { id: uid(), type: 'payment' as const, amount, created_at: new Date().toISOString(), note: note.trim() || null },
       ];
       const paid = debt.paid + amount;
       return update((prev) => ({
         ...prev, debts: prev.debts.map((d) => (d.id === id ? { ...d, paid, payment_history: paymentHistory } : d)),
       }), [cloudUpsert('debts', { ...debt, paid, payment_history: paymentHistory })]);
+    },
+    increaseDebt: (id, amount, note = '') => {
+      const debt = stateRef.current?.debts.find((d) => d.id === id);
+      if (!debt) return Promise.resolve('Không tìm thấy khoản nợ.');
+      if (amount <= 0) return Promise.resolve('Số nợ tăng thêm phải lớn hơn 0.');
+      const paymentHistory = [
+        ...(debt.payment_history ?? []),
+        { id: uid(), type: 'increase' as const, amount, created_at: new Date().toISOString(), note: note.trim() || null },
+      ];
+      const total = debt.amount + amount;
+      return update((prev) => ({
+        ...prev, debts: prev.debts.map((d) => (d.id === id ? { ...d, amount: total, payment_history: paymentHistory } : d)),
+      }), [cloudUpsert('debts', { ...debt, amount: total, payment_history: paymentHistory })]);
     },
     deleteDebt: (id) => update((p) => ({ ...p, debts: p.debts.filter((d) => d.id !== id) }), [cloudDelete('debts', id)]),
     saveReminder: (input) => {

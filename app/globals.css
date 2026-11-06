@@ -203,6 +203,35 @@ select option { color: #101828; background: #fff; }
 .row-item:nth-child(4n + 3) { --row-accent: 52, 211, 153; }
 .row-item:nth-child(4n + 4) { --row-accent: 251, 191, 36; }
 .row-item .sub { font-size: 13px; color: var(--muted); }
+.debt-history-list { gap: 5px; }
+.debt-history-item {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  padding: 7px 10px; border: 1px solid transparent; border-radius: 10px;
+}
+.debt-history-payment {
+  background: linear-gradient(100deg, rgba(52, 199, 89, .14), rgba(52, 199, 89, .035));
+  border-color: rgba(52, 199, 89, .17);
+}
+.debt-history-increase {
+  background: linear-gradient(100deg, rgba(255, 59, 48, .15), rgba(255, 59, 48, .035));
+  border-color: rgba(255, 90, 79, .19);
+}
+.debt-history-payment b { color: #83dfa0; }
+.debt-history-increase b { color: #ff9a91; }
+.debt-history-item .debt-history-balance { color: var(--text); white-space: nowrap; }
+.debt-action-increase {
+  color: #ff9a91; border-color: rgba(255, 90, 79, .35);
+  background: rgba(255, 59, 48, .1);
+}
+.debt-action-payment {
+  border-color: rgba(52, 199, 89, .38);
+  background: rgba(52, 199, 89, .16);
+}
+.debt-balance-summary {
+  margin-top: 8px; padding: 7px 10px; border-radius: 9px;
+  background: rgba(255, 255, 255, .055); font-size: 13px;
+}
+.debt-net-change { color: var(--muted); }
 .progress { height: 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.15); overflow: hidden; margin-top: 6px; }
 .progress > div {
   height: 100%; background: linear-gradient(90deg, #0a84ff, #45d6cb, #8b5cf6);
