@@ -8,7 +8,7 @@ import type {
   ProductCategory, ProductField, ProductInput, ProductVariant, Reminder, StockMovement,
   TaxCircular, TaxPayment, Transaction, TxInput, Wallet, Workspace, WorkspaceMode,
 } from './types';
-import { emptyState, seedDemoState } from './demo';
+import { emptyState, seedDemoState, seedDemoInventoryData } from './demo';
 import { getSessionUser, setSessionUser, syncSessionUserFromSupabase } from './auth';
 import { createClient, isSupabaseConfigured } from './supabase/client';
 import { uid } from './utils';
@@ -18,6 +18,7 @@ const TABLES = [
   'workspaces', 'members', 'wallets', 'categories', 'transactions', 'budgets',
   'goals', 'debts', 'reminders', 'products', 'product_categories',
   'product_variants', 'product_fields', 'stock_movements', 'tax_payments',
+  'tax_settings',
 ] as const;
 type TableName = (typeof TABLES)[number];
 
@@ -27,7 +28,7 @@ const STATE_TO_TABLE: Record<string, TableName> = {
   goals: 'goals', debts: 'debts', reminders: 'reminders', products: 'products',
   productCategories: 'product_categories', productVariants: 'product_variants',
   productFields: 'product_fields', stockMovements: 'stock_movements',
-  taxPayments: 'tax_payments',
+  taxPayments: 'tax_payments', taxSettings: 'tax_settings',
 };
 
 function loadLocal(user: AppUser): AppState | null {
@@ -57,13 +58,74 @@ export function clearLocalState(user: AppUser): void {
   localStorage.removeItem(stateKey(user.id));
 }
 
+
+// --- Helper dùng chung cho cả hook và AuthForm (đăng ký cloud + nạp mẫu) ---
+// Ghi toàn bộ 1 AppState lên Supabase (upsert từng bảng). Dùng khi đăng ký
+// mới chọn "Nạp dữ liệu mẫu" ở chế độ cloud: lúc đó hook useAppData chưa
+// chạy nên AuthForm gọi trực tiếp hàm này sau khi signUp thành công.
+export async function seedCloudDemoData(sb: NonNullable<ReturnType<typeof createClient>>, user: AppUser): Promise<string | null> {
+  const seed = seedDemoState(user);
+  await upsertCloudStateRows(sb, seed);
+  const { data, error } = await sb.from('workspaces').select('id').eq('id', seed.workspaces[0].id).maybeSingle();
+  if (error || !data) return 'Không ghi được dữ liệu mẫu lên Supabase (kiểm tra RLS / kết nối).';
+  return null;
+}
+
+async function upsertCloudStateRows(sb: NonNullable<ReturnType<typeof createClient>>, s: AppState): Promise<void> {
+  // Mỗi bảng upsert riêng và lỗi của 1 bảng không chặn các bảng khác.
+  // Đặc biệt bảng members để CUỐI: thành viên mời (user_id tự sinh, chưa
+  // phải tài khoản Supabase thật) sẽ lỗi khóa ngoại auth.users — chỉ log,
+  // không được làm hỏng đồng bộ ví/giao dịch/kho.
+  const upsert = async (table: TableName, rows: Array<Record<string, unknown>>) => {
+    if (rows.length === 0) return;
+    const { error } = await sb.from(table).upsert(rows as never);
+    if (error) console.error(`Supabase upsert ${table} lỗi:`, error.message);
+  };
+  await upsert('workspaces', s.workspaces as unknown as Array<Record<string, unknown>>);
+  await upsert('wallets', s.wallets as unknown as Array<Record<string, unknown>>);
+  await upsert('categories', s.categories as unknown as Array<Record<string, unknown>>);
+  await upsert('product_categories', s.productCategories as unknown as Array<Record<string, unknown>>);
+  await upsert('products', s.products as unknown as Array<Record<string, unknown>>);
+  await upsert('product_variants', s.productVariants as unknown as Array<Record<string, unknown>>);
+  await upsert('product_fields', s.productFields as unknown as Array<Record<string, unknown>>);
+  await upsert('transactions', s.transactions as unknown as Array<Record<string, unknown>>);
+  await upsert('budgets', s.budgets as unknown as Array<Record<string, unknown>>);
+  await upsert('goals', s.goals as unknown as Array<Record<string, unknown>>);
+  await upsert('debts', s.debts as unknown as Array<Record<string, unknown>>);
+  await upsert('reminders', s.reminders as unknown as Array<Record<string, unknown>>);
+  await upsert('stock_movements', s.stockMovements as unknown as Array<Record<string, unknown>>);
+  await upsert('tax_payments', s.taxPayments as unknown as Array<Record<string, unknown>>);
+  await upsert('members', s.members.map((m) => ({ id: m.id, workspace_id: m.workspace_id, user_id: m.user_id, role: m.role })));
+}
+
+async function deleteCloudWorkspaceRows(sb: NonNullable<ReturnType<typeof createClient>>, wsIds: string[], productIds: string[]): Promise<void> {
+  if (wsIds.length === 0) return;
+  const del = async (table: TableName) => {
+    const { error } = await sb.from(table).delete().in('workspace_id', wsIds);
+    if (error) throw error;
+  };
+  await del('transactions'); await del('budgets'); await del('goals');
+  await del('debts'); await del('reminders'); await del('stock_movements');
+  await del('tax_payments');
+  if (productIds.length > 0) {
+    const { error } = await sb.from('product_variants').delete().in('product_id', productIds);
+    if (error) throw error;
+  }
+  await del('products'); await del('product_fields'); await del('product_categories');
+  await del('wallets'); await del('categories'); await del('members');
+  const { error } = await sb.from('workspaces').delete().in('id', wsIds);
+  if (error) throw error;
+}
+
 export interface AppData {
   state: AppState | null;
   loading: boolean;
   mode: 'local' | 'cloud';
   currentWorkspace: Workspace | null;
   switchWorkspace: (id: string) => void;
-  saveWorkspace: (input: { id?: string; name: string; mode: WorkspaceMode; tax_circular: TaxCircular }) => void;
+  saveWorkspace: (input: { id?: string; name: string; mode: WorkspaceMode; tax_circular: TaxCircular; vat_rate?: number; tncn_rate?: number; tndn_rate?: number; mon_bai?: number; tncn_deduction?: number }) => void;
+  saveMember: (input: { id?: string; email: string; name: string; role: Member['role'] }) => void;
+  deleteMember: (id: string) => string | null;
   deleteWorkspace: (id: string) => string | null;
   saveWallet: (input: { id?: string; name: string; type: Wallet['type']; balance: number }) => void;
   deleteWallet: (id: string) => void;
@@ -72,6 +134,7 @@ export interface AppData {
   addTransaction: (input: TxInput) => string | null;
   deleteTransaction: (id: string) => void;
   saveBudget: (categoryId: string, month: string, amount: number) => void;
+  deleteBudget: (id: string) => void;
   saveGoal: (input: { id?: string; name: string; target: number; saved: number; deadline?: string | null }) => void;
   contributeGoal: (id: string, amount: number) => void;
   deleteGoal: (id: string) => void;
@@ -79,7 +142,9 @@ export interface AppData {
   payDebt: (id: string, amount: number) => void;
   deleteDebt: (id: string) => void;
   saveReminder: (input: { id?: string; title: string; amount?: number | null; next_date: string; frequency: Reminder['frequency'] }) => void;
-  completeReminder: (id: string) => void;
+  /** Đánh dấu nhắc đã xử lý: dời sang kỳ tiếp; nếu opts.createExpense thì
+   *  ghi thêm 1 giao dịch Chi tương ứng (số tiền của nhắc, ví opts.walletId). */
+  completeReminder: (id: string, opts?: { createExpense?: boolean; walletId?: string | null }) => void;
   deleteReminder: (id: string) => void;
   saveProduct: (input: ProductInput) => void;
   deleteProduct: (id: string) => void;
@@ -91,7 +156,14 @@ export interface AppData {
   saveTaxPayment: (input: { id?: string; tax_type: TaxPayment['tax_type']; period: string; amount: number; paid: boolean; due_date?: string | null; note?: string | null }) => void;
   toggleTaxPaid: (id: string) => void;
   deleteTaxPayment: (id: string) => void;
-  updateTaxSettings: (patch: Partial<Pick<Workspace, 'tax_circular' | 'vat_rate' | 'tncn_rate' | 'tndn_rate' | 'mon_bai'>>) => void;
+  updateTaxSettings: (patch: Partial<Pick<Workspace, 'tax_circular' | 'vat_rate' | 'tncn_rate' | 'tndn_rate' | 'mon_bai' | 'tncn_deduction'>>) => void;
+  /** Nạp chỉ phần kho mẫu (11 sản phẩm...) vào workspace hiện tại, chỉ khi
+   *  kho đang trống — tương đương seedDemoInventory của bản demo. */
+  seedDemoInventory: () => Promise<string | null>;
+  /** Đính kèm ảnh hóa đơn (base64) vào 1 giao dịch — attachReceipt. */
+  attachReceipt: (txId: string, imageBase64: string) => void;
+  /** Xóa TOÀN BỘ dữ liệu của tài khoản (mọi workspace) — dùng khi xóa tài khoản. */
+  deleteAllAccountData: () => Promise<string | null>;
   resetData: (withDemo: boolean) => void;
   /** Nạp dữ liệu mẫu giống bản demo (ghi thật lên Supabase ở chế độ cloud).
    *  Trả về null khi thành công, thông báo lỗi khi thất bại. */
@@ -204,15 +276,22 @@ export function useAppData(): AppData {
     return () => { cancelled = true; };
   }, [authTick]);
 
+  // Mọi thay đổi state đều đồng bộ lên Supabase ở chế độ cloud bằng
+  // full-state upsert (dữ liệu hộ kinh doanh chỉ vài chục dòng nên rẻ).
+  // Trước v5, mỗi hàm chỉ upsert đúng 1 bảng của nó nên số dư ví, tồn kho,
+  // mục tiêu, nợ, nhắc nhở... chỉ đổi ở local, F5 là mất.
+  // cloudOps vẫn được chạy (dùng cho các DELETE tường minh: upsert không
+  // xóa được dòng đã gỡ khỏi state).
   const update = useCallback((fn: (prev: AppState) => AppState, cloudOps?: Array<() => Promise<unknown>>) => {
-    setState((prev) => {
-      if (!prev) return prev;
-      const next = fn(prev);
-      if (mode === 'local') saveLocal(next);
-      return next;
-    });
-    if (mode === 'cloud' && cloudOps) {
-      for (const op of cloudOps) op().catch((e: unknown) => console.error('Supabase sync lỗi:', e));
+    const prev = stateRef.current;
+    if (!prev) return;
+    const next = fn(prev);
+    setState(next);
+    if (mode === 'local') saveLocal(next);
+    if (mode === 'cloud') {
+      const sb = createClient();
+      if (sb) upsertCloudStateRows(sb, next).catch((e: unknown) => console.error('Supabase sync lỗi:', e));
+      if (cloudOps) for (const op of cloudOps) op().catch((e: unknown) => console.error('Supabase sync lỗi:', e));
     }
   }, [mode]);
 
@@ -237,45 +316,11 @@ export function useAppData(): AppData {
   // Lưu ý: bảng members trên Supabase chỉ có 4 cột (id, workspace_id,
   // user_id, role) nên khi upsert phải lược bỏ email/name của bản local.
   const deleteCloudWorkspaceData = useCallback(async (sb: NonNullable<ReturnType<typeof createClient>>, wsIds: string[], productIds: string[]) => {
-    if (wsIds.length === 0) return;
-    const del = async (table: TableName) => {
-      const { error } = await sb.from(table).delete().in('workspace_id', wsIds);
-      if (error) throw error;
-    };
-    await del('transactions'); await del('budgets'); await del('goals');
-    await del('debts'); await del('reminders'); await del('stock_movements');
-    await del('tax_payments');
-    if (productIds.length > 0) {
-      const { error } = await sb.from('product_variants').delete().in('product_id', productIds);
-      if (error) throw error;
-    }
-    await del('products'); await del('product_fields'); await del('product_categories');
-    await del('wallets'); await del('categories'); await del('members');
-    const { error } = await sb.from('workspaces').delete().in('id', wsIds);
-    if (error) throw error;
+    await deleteCloudWorkspaceRows(sb, wsIds, productIds);
   }, []);
 
   const upsertCloudState = useCallback(async (sb: NonNullable<ReturnType<typeof createClient>>, s: AppState) => {
-    const upsert = async (table: TableName, rows: Array<Record<string, unknown>>) => {
-      if (rows.length === 0) return;
-      const { error } = await sb.from(table).upsert(rows as never);
-      if (error) throw error;
-    };
-    await upsert('workspaces', s.workspaces as unknown as Array<Record<string, unknown>>);
-    await upsert('members', s.members.map((m) => ({ id: m.id, workspace_id: m.workspace_id, user_id: m.user_id, role: m.role })));
-    await upsert('wallets', s.wallets as unknown as Array<Record<string, unknown>>);
-    await upsert('categories', s.categories as unknown as Array<Record<string, unknown>>);
-    await upsert('product_categories', s.productCategories as unknown as Array<Record<string, unknown>>);
-    await upsert('products', s.products as unknown as Array<Record<string, unknown>>);
-    await upsert('product_variants', s.productVariants as unknown as Array<Record<string, unknown>>);
-    await upsert('product_fields', s.productFields as unknown as Array<Record<string, unknown>>);
-    await upsert('transactions', s.transactions as unknown as Array<Record<string, unknown>>);
-    await upsert('budgets', s.budgets as unknown as Array<Record<string, unknown>>);
-    await upsert('goals', s.goals as unknown as Array<Record<string, unknown>>);
-    await upsert('debts', s.debts as unknown as Array<Record<string, unknown>>);
-    await upsert('reminders', s.reminders as unknown as Array<Record<string, unknown>>);
-    await upsert('stock_movements', s.stockMovements as unknown as Array<Record<string, unknown>>);
-    await upsert('tax_payments', s.taxPayments as unknown as Array<Record<string, unknown>>);
+    await upsertCloudStateRows(sb, s);
   }, []);
 
   const loadSampleData = useCallback(async (): Promise<string | null> => {
@@ -290,6 +335,8 @@ export function useAppData(): AppData {
       try {
         await upsertCloudState(sb, seed);
         await deleteCloudWorkspaceData(sb, oldWsIds, oldProductIds);
+        const { data: chk, error: chkErr } = await sb.from('workspaces').select('id').eq('id', seed.workspaces[0].id).maybeSingle();
+        if (chkErr || !chk) throw new Error('workspace mẫu không ghi được (kiểm tra RLS / kết nối)');
       } catch (e) {
         console.error('Nạp dữ liệu mẫu lỗi:', e);
         return `Không ghi được dữ liệu mẫu lên Supabase: ${e instanceof Error ? e.message : String(e)}`;
@@ -330,30 +377,72 @@ export function useAppData(): AppData {
     saveWorkspace: (input) => {
       const user = stateRef.current?.user; if (!user) return;
       if (input.id) {
-        const row = { ...stateRef.current?.workspaces.find((w) => w.id === input.id), ...input };
-        update((p) => ({ ...p, workspaces: p.workspaces.map((w) => (w.id === input.id ? { ...w, ...input } : w)) }),
-          [cloudUpsert('workspaces', row as unknown as Record<string, unknown>)]);
+        const prevWs = stateRef.current?.workspaces.find((w) => w.id === input.id);
+        const merged: Workspace = {
+          ...(prevWs as Workspace),
+          name: input.name, mode: input.mode, tax_circular: input.tax_circular,
+          vat_rate: input.vat_rate ?? prevWs?.vat_rate ?? 0.01,
+          tncn_rate: input.tncn_rate ?? prevWs?.tncn_rate ?? 0.005,
+          tndn_rate: input.tndn_rate ?? prevWs?.tndn_rate ?? 0.2,
+          mon_bai: input.mon_bai ?? prevWs?.mon_bai ?? 1000000,
+          tncn_deduction: input.tncn_deduction ?? prevWs?.tncn_deduction ?? 11000000,
+        };
+        update((pr) => ({ ...pr, workspaces: pr.workspaces.map((w) => (w.id === input.id ? merged : w)) }),
+          [cloudUpsert('workspaces', merged as unknown as Record<string, unknown>)]);
       } else {
         const ws: Workspace = {
           id: uid(), owner_id: user.id, name: input.name, mode: input.mode,
-          tax_circular: input.tax_circular, vat_rate: 0.01, tncn_rate: 0.005,
-          tndn_rate: 0.2, mon_bai: 1000000, created_at: new Date().toISOString(),
+          tax_circular: input.tax_circular,
+          vat_rate: input.vat_rate ?? 0.01, tncn_rate: input.tncn_rate ?? 0.005,
+          tndn_rate: input.tndn_rate ?? 0.2, mon_bai: input.mon_bai ?? 1000000,
+          tncn_deduction: input.tncn_deduction ?? 11000000,
+          created_at: new Date().toISOString(),
         };
-        update((p) => ({ ...p, workspaces: [...p.workspaces, ws], currentWorkspaceId: ws.id }),
+        const member: Member = { id: uid(), workspace_id: ws.id, user_id: user.id, role: 'owner', email: user.email, name: user.name };
+        update((pr) => ({ ...pr, workspaces: [...pr.workspaces, ws], members: [...pr.members, member], currentWorkspaceId: ws.id }),
           [cloudUpsert('workspaces', ws as unknown as Record<string, unknown>)]);
       }
+    },
+    saveMember: (input) => {
+      const pr = stateRef.current; if (!pr || !pr.currentWorkspaceId) return;
+      const email = input.email.trim().toLowerCase();
+      if (!email) return;
+      if (input.id) {
+        update((prev) => ({ ...prev, members: prev.members.map((m) => (m.id === input.id ? { ...m, email, name: input.name.trim(), role: input.role } : m)) }),
+          [cloudUpsert('members', { id: input.id, workspace_id: pr.currentWorkspaceId, user_id: pr.members.find((m) => m.id === input.id)?.user_id ?? uid(), role: input.role })]);
+      } else {
+        if (pr.members.some((m) => m.workspace_id === pr.currentWorkspaceId && m.email?.toLowerCase() === email)) return;
+        const m: Member = { id: uid(), workspace_id: pr.currentWorkspaceId, user_id: uid(), role: input.role, email, name: input.name.trim() || email };
+        update((prev) => ({ ...prev, members: [...prev.members, m] }),
+          [cloudUpsert('members', { id: m.id, workspace_id: m.workspace_id, user_id: m.user_id, role: m.role })]);
+      }
+    },
+    deleteMember: (id) => {
+      const pr = stateRef.current; if (!pr) return 'Chưa tải dữ liệu.';
+      const m = pr.members.find((x) => x.id === id);
+      if (!m) return 'Không tìm thấy thành viên.';
+      if (m.role === 'owner') return 'Không thể xóa chủ sở hữu không gian.';
+      update((prev) => ({ ...prev, members: prev.members.filter((x) => x.id !== id) }),
+        [cloudDelete('members', id)]);
+      return null;
     },
     deleteWorkspace: (id) => {
       const p = stateRef.current; if (!p) return 'Chưa tải dữ liệu.';
       if (p.workspaces.length <= 1) return 'Không thể xóa không gian cuối cùng.';
       const rest = p.workspaces.filter((w) => w.id !== id);
+      const byWs = <T extends { workspace_id: string }>(rows: T[]) => rows.filter((r) => r.workspace_id !== id);
       update((prev) => ({
         ...prev,
         workspaces: rest,
         currentWorkspaceId: prev.currentWorkspaceId === id ? rest[0].id : prev.currentWorkspaceId,
-        wallets: prev.wallets.filter((w) => w.workspace_id !== id),
-        transactions: prev.transactions.filter((t) => t.workspace_id !== id),
-        products: prev.products.filter((x) => x.workspace_id !== id),
+        members: byWs(prev.members), wallets: byWs(prev.wallets),
+        categories: byWs(prev.categories), transactions: byWs(prev.transactions),
+        budgets: byWs(prev.budgets), goals: byWs(prev.goals), debts: byWs(prev.debts),
+        reminders: byWs(prev.reminders), products: byWs(prev.products),
+        productCategories: byWs(prev.productCategories),
+        productFields: byWs(prev.productFields),
+        stockMovements: byWs(prev.stockMovements), taxPayments: byWs(prev.taxPayments),
+        productVariants: prev.productVariants.filter((v) => !prev.products.some((x) => x.id === v.product_id && x.workspace_id === id)),
       }), [cloudDelete('workspaces', id)]);
       return null;
     },
@@ -367,10 +456,13 @@ export function useAppData(): AppData {
         update((prev) => ({ ...prev, wallets: [...prev.wallets, w] }), [cloudUpsert('wallets', w as unknown as Record<string, unknown>)]);
       }
     },
-    deleteWallet: (id) => update((p) => ({
-      ...p, wallets: p.wallets.filter((w) => w.id !== id),
-      transactions: p.transactions.filter((t) => t.wallet_id !== id),
-    }), [cloudDelete('wallets', id)]),
+    deleteWallet: (id) => {
+      const txIds = (stateRef.current?.transactions ?? []).filter((t) => t.wallet_id === id).map((t) => t.id);
+      update((p) => ({
+        ...p, wallets: p.wallets.filter((w) => w.id !== id),
+        transactions: p.transactions.filter((t) => t.wallet_id !== id),
+      }), [cloudDelete('wallets', id), ...txIds.map((tid) => cloudDelete('transactions', tid))]);
+    },
     saveCategory: (input) => {
       const p = stateRef.current; if (!p || !p.currentWorkspaceId) return;
       if (input.id) {
@@ -381,11 +473,14 @@ export function useAppData(): AppData {
         update((prev) => ({ ...prev, categories: [...prev.categories, c] }), [cloudUpsert('categories', c as unknown as Record<string, unknown>)]);
       }
     },
-    deleteCategory: (id) => update((p) => ({
-      ...p, categories: p.categories.filter((c) => c.id !== id),
-      transactions: p.transactions.map((t) => (t.category_id === id ? { ...t, category_id: null } : t)),
-      budgets: p.budgets.filter((b) => b.category_id !== id),
-    }), [cloudDelete('categories', id)]),
+    deleteCategory: (id) => {
+      const budgetIds = (stateRef.current?.budgets ?? []).filter((b) => b.category_id === id).map((b) => b.id);
+      update((p) => ({
+        ...p, categories: p.categories.filter((c) => c.id !== id),
+        transactions: p.transactions.map((t) => (t.category_id === id ? { ...t, category_id: null } : t)),
+        budgets: p.budgets.filter((b) => b.category_id !== id),
+      }), [cloudDelete('categories', id), ...budgetIds.map((bid) => cloudDelete('budgets', bid))]);
+    },
     addTransaction: (input) => {
       const p = stateRef.current; if (!p || !p.currentWorkspaceId) return 'Chưa chọn không gian.';
       const wallet = p.wallets.find((w) => w.id === input.wallet_id);
@@ -406,11 +501,12 @@ export function useAppData(): AppData {
       }
       const tx: Transaction = {
         id: uid(), workspace_id: p.currentWorkspaceId, wallet_id: input.wallet_id,
+        to_wallet_id: input.to_wallet_id ?? null,
         type: input.type, amount: input.amount, category_id: input.category_id ?? null,
         product_id: input.product_id ?? null, variant_id: input.variant_id ?? null,
         imei: input.imei ?? null, quantity: input.quantity ?? 1,
         unit_price: input.unit_price ?? null, cost_price: input.cost_price ?? null,
-        profit, tax_type: null, tax_rate: null, note: input.note ?? '', date: input.date,
+        profit, tax_type: input.tax_type ?? null, tax_rate: input.tax_rate ?? null, receipt_image: input.receipt_image ?? null, note: input.note ?? '', date: input.date,
         created_at: new Date().toISOString(),
       };
       const movements: StockMovement[] = [];
@@ -460,9 +556,16 @@ export function useAppData(): AppData {
       const tx = p.transactions.find((t) => t.id === id); if (!tx) return;
       update((prev) => {
         const wallets = prev.wallets.map((w) => {
-          if (w.id !== tx.wallet_id) return w;
-          const delta = tx.type === 'income' ? -tx.amount : tx.amount;
-          return { ...w, balance: w.balance + delta };
+          if (w.id === tx.wallet_id) {
+            // Thu: đã cộng tiền -> trừ lại; Chi/Chuyển (ví nguồn): đã trừ -> cộng lại.
+            const delta = tx.type === 'income' ? -tx.amount : tx.amount;
+            return { ...w, balance: w.balance + delta };
+          }
+          // Chuyển ví: hoàn lại ví đích số tiền đã nhận.
+          if (tx.type === 'transfer' && tx.to_wallet_id && w.id === tx.to_wallet_id) {
+            return { ...w, balance: w.balance - tx.amount };
+          }
+          return w;
         });
         let products = prev.products;
         let variants = prev.productVariants;
@@ -480,6 +583,7 @@ export function useAppData(): AppData {
         };
       }, [cloudDelete('transactions', id)]);
     },
+    deleteBudget: (id) => update((p) => ({ ...p, budgets: p.budgets.filter((b) => b.id !== id) }), [cloudDelete('budgets', id)]),
     saveBudget: (categoryId, month, amount) => {
       const p = stateRef.current; if (!p || !p.currentWorkspaceId) return;
       const existing = p.budgets.find((b) => b.category_id === categoryId && b.month === month);
@@ -529,19 +633,38 @@ export function useAppData(): AppData {
         update((prev) => ({ ...prev, reminders: [...prev.reminders, r] }), [cloudUpsert('reminders', r as unknown as Record<string, unknown>)]);
       }
     },
-    completeReminder: (id) => update((prev) => ({
-      ...prev,
-      reminders: prev.reminders.map((r) => {
-        if (r.id !== id) return r;
-        const d = new Date(r.next_date);
-        if (r.frequency === 'daily') d.setDate(d.getDate() + 1);
-        else if (r.frequency === 'weekly') d.setDate(d.getDate() + 7);
-        else if (r.frequency === 'quarterly') d.setMonth(d.getMonth() + 3);
-        else if (r.frequency === 'yearly') d.setFullYear(d.getFullYear() + 1);
-        else d.setMonth(d.getMonth() + 1);
-        return { ...r, next_date: d.toISOString().slice(0, 10) };
-      }),
-    })),
+    completeReminder: (id, opts) => {
+      const pr = stateRef.current; if (!pr) return;
+      const r = pr.reminders.find((x) => x.id === id); if (!r) return;
+      const d = new Date(r.next_date);
+      if (r.frequency === 'daily') d.setDate(d.getDate() + 1);
+      else if (r.frequency === 'weekly') d.setDate(d.getDate() + 7);
+      else if (r.frequency === 'quarterly') d.setMonth(d.getMonth() + 3);
+      else if (r.frequency === 'yearly') d.setFullYear(d.getFullYear() + 1);
+      else d.setMonth(d.getMonth() + 1);
+      const nextDate = d.toISOString().slice(0, 10);
+      let tx: Transaction | null = null;
+      if (opts?.createExpense && r.amount && r.amount > 0) {
+        const walletId = opts.walletId ?? pr.wallets.find((w) => w.workspace_id === r.workspace_id)?.id ?? null;
+        if (walletId) {
+          tx = {
+            id: uid(), workspace_id: r.workspace_id, wallet_id: walletId,
+            type: 'expense', amount: r.amount, category_id: null,
+            product_id: null, variant_id: null, imei: null, quantity: 1,
+            unit_price: null, cost_price: null, profit: null,
+            tax_type: null, tax_rate: null, receipt_image: null,
+            note: `Nhắc nhở: ${r.title}`, date: r.next_date,
+            created_at: new Date().toISOString(),
+          };
+        }
+      }
+      update((prev) => ({
+        ...prev,
+        reminders: prev.reminders.map((x) => (x.id === id ? { ...x, next_date: nextDate } : x)),
+        wallets: tx ? prev.wallets.map((w) => (w.id === tx!.wallet_id ? { ...w, balance: w.balance - tx!.amount } : w)) : prev.wallets,
+        transactions: tx ? [tx, ...prev.transactions] : prev.transactions,
+      }), tx ? [cloudUpsert('transactions', tx as unknown as Record<string, unknown>)] : []);
+    },
     deleteReminder: (id) => update((p) => ({ ...p, reminders: p.reminders.filter((r) => r.id !== id) }), [cloudDelete('reminders', id)]),
     saveProduct: (input) => {
       const p = stateRef.current; if (!p || !p.currentWorkspaceId) return;
@@ -556,8 +679,11 @@ export function useAppData(): AppData {
           id: input.id, workspace_id: wsId, category_id: input.category_id ?? null,
           name: input.name, sku: input.sku, unit: input.unit, cost_price: input.cost_price,
           sale_price: input.sale_price, stock: totalStock, min_stock: input.min_stock,
-          custom_values: input.custom_values ?? {},
+          custom_values: input.custom_values ?? {}, image: input.image ?? null,
         };
+        const removedVariantIds = (stateRef.current?.productVariants ?? [])
+          .filter((v) => v.product_id === input.id && !variants.some((nv) => nv.id === v.id))
+          .map((v) => v.id);
         update((prev) => ({
           ...prev,
           products: prev.products.map((x) => (x.id === input.id ? product : x)),
@@ -568,13 +694,14 @@ export function useAppData(): AppData {
         }), [
           cloudUpsert('products', product as unknown as Record<string, unknown>),
           ...variants.map((v) => cloudUpsert('product_variants', v as unknown as Record<string, unknown>)),
+          ...removedVariantIds.map((vid) => cloudDelete('product_variants', vid)),
         ]);
       } else {
         const product: Product = {
           id: uid(), workspace_id: wsId, category_id: input.category_id ?? null,
           name: input.name, sku: input.sku, unit: input.unit, cost_price: input.cost_price,
           sale_price: input.sale_price, stock: input.stock, min_stock: input.min_stock,
-          custom_values: input.custom_values ?? {},
+          custom_values: input.custom_values ?? {}, image: input.image ?? null,
         };
         const variants: ProductVariant[] = input.variants.map((v) => ({
           id: uid(), product_id: product.id, name: v.name,
@@ -590,10 +717,21 @@ export function useAppData(): AppData {
         ]);
       }
     },
-    deleteProduct: (id) => update((prev) => ({
-      ...prev, products: prev.products.filter((x) => x.id !== id),
-      productVariants: prev.productVariants.filter((v) => v.product_id !== id),
-    }), [cloudDelete('products', id)]),
+    // Xóa sản phẩm: lịch sử nhập/xuất kho xóa theo, nhưng giao dịch bán/
+    // nhập cũ GIỮ nguyên số lượng + giá vốn để báo cáo lãi không đổi.
+    deleteProduct: (id) => {
+      const variantIds = (stateRef.current?.productVariants ?? []).filter((v) => v.product_id === id).map((v) => v.id);
+      const movementIds = (stateRef.current?.stockMovements ?? []).filter((m) => m.product_id === id).map((m) => m.id);
+      update((prev) => ({
+        ...prev, products: prev.products.filter((x) => x.id !== id),
+        productVariants: prev.productVariants.filter((v) => v.product_id !== id),
+        stockMovements: prev.stockMovements.filter((m) => m.product_id !== id),
+      }), [
+        cloudDelete('products', id),
+        ...variantIds.map((vid) => cloudDelete('product_variants', vid)),
+        ...movementIds.map((mid) => cloudDelete('stock_movements', mid)),
+      ]);
+    },
     importStock: (input) => {
       const p = stateRef.current; if (!p || !p.currentWorkspaceId) return 'Chưa chọn không gian.';
       const product = p.products.find((x) => x.id === input.product_id);
@@ -674,10 +812,70 @@ export function useAppData(): AppData {
       ...prev, taxPayments: prev.taxPayments.map((t) => (t.id === id ? { ...t, paid: !t.paid } : t)),
     })),
     deleteTaxPayment: (id) => update((prev) => ({ ...prev, taxPayments: prev.taxPayments.filter((t) => t.id !== id) }), [cloudDelete('tax_payments', id)]),
-    updateTaxSettings: (patch) => update((prev) => ({
-      ...prev,
-      workspaces: prev.workspaces.map((w) => (w.id === prev.currentWorkspaceId ? { ...w, ...patch } : w)),
-    })),
+    // Trước v5 hàm này chỉ đổi state local — đổi thông tư trên web sẽ mất
+    // sau F5 ở chế độ cloud. Giờ ghi thật lên bảng workspaces + tax_settings.
+    updateTaxSettings: (patch) => {
+      const ws = stateRef.current?.workspaces.find((w) => w.id === stateRef.current?.currentWorkspaceId);
+      if (!ws) return;
+      const merged: Workspace = { ...ws, ...patch };
+      update((prev) => ({
+        ...prev,
+        workspaces: prev.workspaces.map((w) => (w.id === prev.currentWorkspaceId ? merged : w)),
+      }), [
+        cloudUpsert('workspaces', merged as unknown as Record<string, unknown>),
+        cloudUpsert('tax_settings', {
+          id: merged.id, workspace_id: merged.id, circular: merged.tax_circular,
+          vat_rate: merged.vat_rate, tncn_rate: merged.tncn_rate,
+          tndn_rate: merged.tndn_rate, mon_bai: merged.mon_bai,
+        }),
+      ]);
+    },
+    seedDemoInventory: async (): Promise<string | null> => {
+      const pr = stateRef.current; if (!pr || !pr.currentWorkspaceId) return 'Chưa chọn không gian.';
+      if (pr.products.some((x) => x.workspace_id === pr.currentWorkspaceId)) {
+        return 'Kho đã có sản phẩm rồi — chỉ nạp kho mẫu khi kho đang trống.';
+      }
+      const user = pr.user; if (!user) return 'Chưa đăng nhập.';
+      const inv = seedDemoInventoryData(user, pr.currentWorkspaceId);
+      const invState: AppState = {
+        ...pr, productCategories: inv.productCategories, products: inv.products,
+        productVariants: inv.productVariants, productFields: inv.productFields,
+        stockMovements: inv.stockMovements,
+      };
+      if (modeRef.current === 'cloud') {
+        const sb = createClient();
+        if (!sb) return 'Chưa cấu hình Supabase.';
+        try { await upsertCloudStateRows(sb, invState); } catch (e) {
+          return `Không ghi được kho mẫu lên Supabase: ${e instanceof Error ? e.message : String(e)}`;
+        }
+      }
+      setState(invState);
+      if (modeRef.current === 'local') saveLocal(invState);
+      return null;
+    },
+    attachReceipt: (txId, imageBase64) => {
+      const tx = stateRef.current?.transactions.find((t) => t.id === txId);
+      if (!tx) return;
+      update((prev) => ({
+        ...prev,
+        transactions: prev.transactions.map((t) => (t.id === txId ? { ...t, receipt_image: imageBase64 } : t)),
+      }), [cloudUpsert('transactions', { ...tx, receipt_image: imageBase64 } as unknown as Record<string, unknown>)]);
+    },
+    deleteAllAccountData: async (): Promise<string | null> => {
+      const pr = stateRef.current; if (!pr || !pr.user) return 'Chưa đăng nhập.';
+      const wsIds = pr.workspaces.map((w) => w.id);
+      const productIds = pr.products.map((x) => x.id);
+      if (modeRef.current === 'cloud') {
+        const sb = createClient();
+        if (!sb) return 'Chưa cấu hình Supabase.';
+        try { await deleteCloudWorkspaceRows(sb, wsIds, productIds); } catch (e) {
+          return `Không xóa được dữ liệu trên Supabase: ${e instanceof Error ? e.message : String(e)}`;
+        }
+      }
+      clearLocalState(pr.user);
+      setState(null);
+      return null;
+    },
     resetData: (withDemo) => {
       // Giữ tương thích với các nút cũ: bản async mới ở load/clearSampleData.
       void (withDemo ? loadSampleData() : clearSampleData());

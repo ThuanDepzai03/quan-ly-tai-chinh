@@ -132,6 +132,8 @@ export default function Dashboard() {
                   <div className="sub">
                     {fmtDate(t.date)} • {catName(t.category_id)} • {walletName(t.wallet_id)}
                     {t.profit ? ` • Lãi ${fmtVND(t.profit)}` : ''}{t.note ? ` • ${t.note}` : ''}
+                    {t.tax_type ? ` • Thuế ${t.tax_type}${t.tax_rate ? ` ${(t.tax_rate * 100).toLocaleString('vi-VN')}%` : ''}` : ''}
+                    {t.receipt_image ? ' • 🧾 có hóa đơn' : ''}
                   </div>
                 </div>
                 <button className="btn-ghost btn-small" onClick={() => setConfirmDeleteTx(t.id)}>Xóa</button>
@@ -204,7 +206,13 @@ export default function Dashboard() {
                   <div><b>{r.title}</b><div className="sub">{fmtDate(r.next_date)} • {r.frequency}</div></div>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     <span>{r.amount ? fmtVND(r.amount) : ''}</span>
-                    <button className="btn-ghost btn-small" onClick={() => data.completeReminder(r.id)}>Xong</button>
+                    <button className="btn-ghost btn-small" onClick={() => {
+                      let createExpense = false;
+                      if (r.amount && r.amount > 0 && wallets.length > 0) {
+                        createExpense = confirm(`Đánh dấu "${r.title}" đã xử lý và ghi thêm 1 giao dịch Chi ${fmtVND(r.amount)} vào ví ${wallets[0].name}?\n\nBấm OK = ghi Chi + dời sang kỳ tiếp.\nBấm Hủy = chỉ dời sang kỳ tiếp, không ghi Chi.`);
+                      }
+                      data.completeReminder(r.id, { createExpense, walletId: wallets[0]?.id ?? null });
+                    }}>Xong</button>
                   </div>
                 </div>
               ))}

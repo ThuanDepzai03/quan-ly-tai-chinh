@@ -19,6 +19,7 @@ export default function Kho() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [showCatManager, setShowCatManager] = useState(false);
   const [showFieldManager, setShowFieldManager] = useState(false);
+  const [seedMsg, setSeedMsg] = useState('');
 
   const wsId = state?.currentWorkspaceId ?? null;
   const products = useMemo(
@@ -73,11 +74,18 @@ export default function Kho() {
 
       <GlassCard title="Kho hàng" action={
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {products.length === 0 ? (
+            <button className="btn-ghost btn-small" onClick={async () => {
+              const err = await data.seedDemoInventory();
+              setSeedMsg(err ?? 'Đã nạp kho mẫu giống bản demo: 11 sản phẩm, 7 danh mục, 5 trường tùy chỉnh, 5 biến thể.');
+            }}>📥 Nạp kho mẫu</button>
+          ) : null}
           <button className="btn-ghost btn-small" onClick={() => setShowCatManager(true)}>Danh mục hàng</button>
           <button className="btn-ghost btn-small" onClick={() => setShowFieldManager(true)}>Trường tùy chỉnh</button>
           <button className="btn-small" onClick={() => { setEditing(null); setShowForm(true); }}>+ Thêm sản phẩm</button>
         </div>
       }>
+        {seedMsg ? <p className="muted" style={{ fontSize: 13 }}>{seedMsg}</p> : null}
         <div className="toolbar">
           <input placeholder="Tìm theo tên, SKU, IMEI…" value={search} onChange={(e) => setSearch(e.target.value)} />
           <select value={catFilter} onChange={(e) => setCatFilter(e.target.value)}>
@@ -94,6 +102,9 @@ export default function Kho() {
               const low = p.stock <= p.min_stock;
               return (
                 <div key={p.id} className="row-item" style={{ alignItems: 'flex-start' }}>
+                  {p.image ? (
+                    <img src={p.image} alt={p.name} style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 12, flexShrink: 0 }} />
+                  ) : null}
                   <div style={{ flex: 1 }}>
                     <b>{p.name}</b>{' '}
                     <span className="badge">{catName(p.category_id)}</span>{' '}

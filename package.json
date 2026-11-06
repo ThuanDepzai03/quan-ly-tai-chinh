@@ -23,5 +23,5 @@
     "start": "next start",
     "typecheck": "tsc --noEmit"
   },
-  "version": "4.0.0"
+  "version": "5.0.0"
 }

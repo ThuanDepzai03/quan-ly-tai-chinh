@@ -4,6 +4,7 @@ import type { AppState, TxType } from '@/lib/types';
 import { WALLET_TYPE_LABELS } from '@/lib/types';
 import { useAppData } from '@/lib/data';
 import { fmtVND, profitOf, todayISO } from '@/lib/utils';
+import { fileToBase64, scanReceipt } from '@/lib/receipt';
 import { Field } from './GlassCard';
 
 export default function TransactionForm({ state, onDone }: {
@@ -28,6 +29,10 @@ export default function TransactionForm({ state, onDone }: {
   const [qty, setQty] = useState(1);
   const [imei, setImei] = useState('');
   const [err, setErr] = useState('');
+  const [taxType, setTaxType] = useState('');
+  const [taxRate, setTaxRate] = useState('');
+  const [receiptImage, setReceiptImage] = useState<string | null>(null);
+  const [scanMsg, setScanMsg] = useState('');
 
   const product = products.find((p) => p.id === productId);
   const variants = state.productVariants.filter((v) => v.product_id === productId);
@@ -56,6 +61,9 @@ export default function TransactionForm({ state, onDone }: {
       quantity: isSale ? qty : 1,
       unit_price: isSale ? salePrice : null,
       cost_price: isSale ? costPrice : null,
+      tax_type: type === 'transfer' ? null : (taxType || null),
+      tax_rate: type === 'transfer' ? null : (taxRate ? Number(taxRate) : null),
+      receipt_image: receiptImage,
       note, date,
     });
     if (error) { setErr(error); return; }
@@ -150,6 +158,56 @@ export default function TransactionForm({ state, onDone }: {
       <Field label="Ghi chú">
         <input placeholder="VD: Bán cho khách Anh Tuấn" value={note} onChange={(e) => setNote(e.target.value)} />
       </Field>
+      {type !== 'transfer' ? (
+        <div className="form-row">
+          <Field label="Đánh dấu thuế (loại thuế)">
+            <select value={taxType} onChange={(e) => { setTaxType(e.target.value); setTaxRate(e.target.value === 'VAT' ? '0.01' : e.target.value === 'TNCN' ? '0.005' : e.target.value === 'TNDN' ? '0.2' : ''); }}>
+              <option value="">— Không đánh dấu thuế —</option>
+              <option value="VAT">VAT</option>
+              <option value="TNCN">TNCN</option>
+              <option value="TNDN">TNDN</option>
+              <option value="mon_bai">Môn bài</option>
+            </select>
+          </Field>
+          <Field label="Thuế suất (VD: 0.01 = 1%)">
+            <input type="number" step="0.001" min={0} max={1} placeholder="0.01" value={taxRate} onChange={(e) => setTaxRate(e.target.value)} disabled={!taxType} />
+          </Field>
+        </div>
+      ) : null}
+      <fieldset className="fieldset">
+        <legend>Hóa đơn (đính kèm / quét)</legend>
+        <div className="flex-row">
+          <label className="btn-secondary" style={{ cursor: 'pointer' }}>
+            📎 Đính kèm ảnh hóa đơn
+            <input type="file" accept="image/jpeg,image/png" style={{ display: 'none' }} onChange={async (e) => {
+              const f = e.target.files?.[0]; if (!f) return;
+              try { setReceiptImage(await fileToBase64(f)); setScanMsg(`Đã đính kèm ${f.name}.`); }
+              catch (err) { setErr(err instanceof Error ? err.message : 'Không đọc được ảnh.'); }
+            }} />
+          </label>
+          <label className="btn-secondary" style={{ cursor: 'pointer' }}>
+            🧾 Quét hóa đơn bằng AI
+            <input type="file" accept="image/jpeg,image/png" style={{ display: 'none' }} onChange={async (e) => {
+              const f = e.target.files?.[0]; if (!f) return;
+              try {
+                const scanned = await scanReceipt(f);
+                setReceiptImage(scanned.image);
+                if (scanned.amount) setAmount(String(scanned.amount));
+                if (scanned.date) setDate(scanned.date);
+                if (scanned.note) setNote(scanned.note);
+                setScanMsg(scanned.amount
+                  ? `Đã quét: số tiền ${fmtVND(scanned.amount)} — kiểm tra lại rồi bấm Lưu giao dịch.`
+                  : 'Đã quét ảnh. Số tiền không trích xuất được tự động — nhập số tiền rồi bấm Lưu.');
+              } catch (err) { setErr(err instanceof Error ? err.message : 'Không quét được hóa đơn.'); }
+            }} />
+          </label>
+          {receiptImage ? (
+            <button type="button" className="btn-ghost" onClick={() => { setReceiptImage(null); setScanMsg(''); }}>Gỡ ảnh</button>
+          ) : null}
+        </div>
+        {scanMsg ? <p className="muted" style={{ fontSize: 13 }}>{scanMsg}</p> : null}
+        {receiptImage ? <img src={receiptImage} alt="Hóa đơn đính kèm" style={{ maxWidth: '100%', maxHeight: 180, objectFit: 'contain', borderRadius: 12, marginTop: 8 }} /> : null}
+      </fieldset>
       {err ? <p className="error">{err}</p> : null}
       <button type="submit">Lưu giao dịch</button>
     </form>

@@ -3,11 +3,15 @@ import { useState } from 'react';
 import AppShell from '@/components/AppShell';
 import GlassCard, { Field, Modal } from '@/components/GlassCard';
 import { useAppData } from '@/lib/data';
-import { getSessionUser, localChangePassword, localDeleteAccount, localRename, setSessionUser } from '@/lib/auth';
+import { getSessionUser, localChangePassword, localDeleteAccount, localRename, setSessionUser, setPin, removePin } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/client';
 import { fmtVND, monthISO } from '@/lib/utils';
 import { TAX_CIRCULAR_LABELS, WORKSPACE_MODE_LABELS } from '@/lib/types';
-import type { TaxCircular, WorkspaceMode } from '@/lib/types';
+import type { MemberRole, TaxCircular, WorkspaceMode } from '@/lib/types';
+
+const ROLE_LABELS: Record<MemberRole, string> = {
+  owner: 'Chủ sở hữu', admin: 'Quản trị', member: 'Thành viên', viewer: 'Chỉ xem',
+};
 
 export default function CaiDat() {
   const data = useAppData();
@@ -15,6 +19,11 @@ export default function CaiDat() {
   const [wsName, setWsName] = useState('');
   const [wsMode, setWsMode] = useState<WorkspaceMode>('household');
   const [wsCircular, setWsCircular] = useState<TaxCircular>('TT88/2021');
+  const [wsVat, setWsVat] = useState('0.01');
+  const [wsTncn, setWsTncn] = useState('0.005');
+  const [wsTndn, setWsTndn] = useState('0.2');
+  const [wsMonBai, setWsMonBai] = useState('1000000');
+  const [wsDeduction, setWsDeduction] = useState('11000000');
   const [showWsForm, setShowWsForm] = useState(false);
   const [editingWsId, setEditingWsId] = useState<string | null>(null);
   const [msg, setMsg] = useState('');
@@ -22,15 +31,21 @@ export default function CaiDat() {
   const [catKind, setCatKind] = useState<'income' | 'expense'>('expense');
   const [budgetCat, setBudgetCat] = useState('');
   const [budgetAmount, setBudgetAmount] = useState('');
-  const [pin, setPin] = useState('');
+  const [pin, setPinInput] = useState('');
+  const [oldPin, setOldPin] = useState('');
   const [newName, setNewName] = useState(state?.user?.name ?? '');
   const [oldPw, setOldPw] = useState('');
   const [newPw, setNewPw] = useState('');
   const [delPw, setDelPw] = useState('');
   const [showDelete, setShowDelete] = useState(false);
+  const [memberEmail, setMemberEmail] = useState('');
+  const [memberName, setMemberName] = useState('');
+  const [memberRole, setMemberRole] = useState<MemberRole>('member');
 
   const wsId = state?.currentWorkspaceId ?? null;
   const cats = (state?.categories ?? []).filter((c) => c.workspace_id === wsId);
+  const members = (state?.members ?? []).filter((m) => m.workspace_id === wsId);
+  const monthBudgets = (state?.budgets ?? []).filter((b) => b.workspace_id === wsId && b.month === monthISO());
   const month = monthISO();
 
   function openWsForm(editId?: string) {
@@ -39,8 +54,14 @@ export default function CaiDat() {
       setWsName(currentWorkspace.name);
       setWsMode(currentWorkspace.mode);
       setWsCircular(currentWorkspace.tax_circular);
+      setWsVat(String(currentWorkspace.vat_rate));
+      setWsTncn(String(currentWorkspace.tncn_rate));
+      setWsTndn(String(currentWorkspace.tndn_rate));
+      setWsMonBai(String(currentWorkspace.mon_bai));
+      setWsDeduction(String(currentWorkspace.tncn_deduction ?? 11000000));
     } else {
       setEditingWsId(null); setWsName(''); setWsMode('household'); setWsCircular('TT88/2021');
+      setWsVat('0.01'); setWsTncn('0.005'); setWsTndn('0.2'); setWsMonBai('1000000'); setWsDeduction('11000000');
     }
     setShowWsForm(true);
   }
@@ -48,7 +69,12 @@ export default function CaiDat() {
   function saveWs(e: React.FormEvent) {
     e.preventDefault();
     if (!wsName.trim()) { setMsg('Vui lòng nhập tên không gian.'); return; }
-    data.saveWorkspace({ id: editingWsId ?? undefined, name: wsName.trim(), mode: wsMode, tax_circular: wsCircular });
+    data.saveWorkspace({
+      id: editingWsId ?? undefined, name: wsName.trim(), mode: wsMode, tax_circular: wsCircular,
+      vat_rate: Number(wsVat) || 0, tncn_rate: Number(wsTncn) || 0,
+      tndn_rate: Number(wsTndn) || 0, mon_bai: Number(wsMonBai) || 0,
+      tncn_deduction: Number(wsDeduction) || 0,
+    });
     setShowWsForm(false);
     setMsg(editingWsId ? 'Đã cập nhật không gian.' : 'Đã tạo không gian mới và chuyển sang đó.');
   }
@@ -57,14 +83,24 @@ export default function CaiDat() {
     e.preventDefault();
     const user = getSessionUser();
     if (!user) return;
+    if (newPw.length < 6) { setMsg('Mật khẩu mới phải có ít nhất 6 ký tự.'); return; }
     const sb = createClient();
     if (sb) {
+      // Supabase updateUser không kiểm tra mật khẩu cũ — phải đăng nhập lại
+      // bằng mật khẩu cũ để xác thực trước, rồi mới đổi. Đổi xong đăng xuất
+      // MỌI phiên (scope global) như bản demo, bắt đăng nhập lại.
+      const { error: verifyErr } = await sb.auth.signInWithPassword({ email: user.email, password: oldPw });
+      if (verifyErr) { setMsg('Mật khẩu cũ không đúng.'); return; }
       const { error } = await sb.auth.updateUser({ password: newPw });
-      setMsg(error ? `Lỗi: ${error.message}` : 'Đã đổi mật khẩu (Supabase).');
-    } else {
-      const err = await localChangePassword(user, oldPw, newPw);
-      setMsg(err ?? 'Đã đổi mật khẩu.');
+      if (error) { setMsg(`Lỗi: ${error.message}`); return; }
+      await sb.auth.signOut({ scope: 'global' });
+      setSessionUser(null);
+      setMsg('Đã đổi mật khẩu và đăng xuất mọi thiết bị. Hãy đăng nhập lại.');
+      location.href = '/auth';
+      return;
     }
+    const err = await localChangePassword(user, oldPw, newPw);
+    setMsg(err ?? 'Đã đổi mật khẩu.');
     setOldPw(''); setNewPw('');
   }
 
@@ -88,7 +124,16 @@ export default function CaiDat() {
     if (!user) return;
     const sb = createClient();
     if (sb) {
-      setMsg('Xóa tài khoản Supabase: vào Supabase Dashboard > Authentication > Users để xóa, hoặc liên hệ quản trị.');
+      // Xóa toàn bộ dữ liệu của tài khoản trên Supabase + local, đăng xuất.
+      // Lưu ý: bản ghi đăng nhập trong auth.users chỉ xóa được bằng Admin API
+      // (service_role) nên cần xóa thêm ở Supabase Dashboard > Authentication
+      // > Users nếu muốn xóa hẳn tài khoản đăng nhập.
+      const err = await data.deleteAllAccountData();
+      if (err) { setMsg(err); return; }
+      await sb.auth.signOut();
+      setSessionUser(null);
+      setMsg('Đã xóa toàn bộ dữ liệu tài khoản. Tài khoản đăng nhập (auth.users) cần xóa thêm ở Supabase Dashboard nếu muốn xóa hẳn.');
+      location.href = '/auth';
       return;
     }
     const err = await localDeleteAccount(user, delPw);
@@ -102,6 +147,14 @@ export default function CaiDat() {
     if (sb) await sb.auth.signOut();
     setSessionUser(null);
     location.href = '/auth';
+  }
+
+  async function savePin(e: React.FormEvent) {
+    e.preventDefault();
+    const err = await setPin(pin, oldPin || undefined);
+    if (err) { setMsg(err); return; }
+    setMsg('Đã đặt/đổi mã PIN khóa màn hình (lưu dạng băm). Tải lại trang để kiểm tra.');
+    setPinInput(''); setOldPin('');
   }
 
   return (
@@ -140,8 +193,13 @@ export default function CaiDat() {
         <GlassCard title="Cài đặt thuế cho không gian hiện tại">
           <form className="form-grid" onSubmit={(e) => {
             e.preventDefault();
-            data.updateTaxSettings({ tax_circular: currentWorkspace.tax_circular });
-            setMsg('Đã lưu cài đặt thuế.');
+            data.updateTaxSettings({
+              tax_circular: currentWorkspace.tax_circular,
+              vat_rate: currentWorkspace.vat_rate, tncn_rate: currentWorkspace.tncn_rate,
+              tndn_rate: currentWorkspace.tndn_rate, mon_bai: currentWorkspace.mon_bai,
+              tncn_deduction: currentWorkspace.tncn_deduction ?? 11000000,
+            });
+            setMsg('Đã lưu cài đặt thuế (ghi lên Supabase).');
           }}>
             <Field label="Thông tư áp dụng">
               <select value={currentWorkspace.tax_circular} onChange={(e) => {
@@ -172,10 +230,55 @@ export default function CaiDat() {
                   onChange={(e) => data.updateTaxSettings({ mon_bai: Number(e.target.value) || 0 })} />
               </Field>
             </div>
+            <Field label="Giảm trừ gia cảnh TNCN (đ/tháng)">
+              <input type="number" min={0} value={currentWorkspace.tncn_deduction ?? 11000000}
+                onChange={(e) => data.updateTaxSettings({ tncn_deduction: Number(e.target.value) || 0 })} />
+            </Field>
+            <button type="submit">Lưu cài đặt thuế</button>
             <p className="muted" style={{ fontSize: 13 }}>Thay đổi ở đây áp dụng ngay cho trang Thuế và Báo cáo.</p>
           </form>
         </GlassCard>
       ) : null}
+
+      <GlassCard title="Thành viên & phân quyền">
+        <form className="form-grid" onSubmit={(e) => {
+          e.preventDefault();
+          if (!memberEmail.trim()) { setMsg('Nhập email thành viên.'); return; }
+          data.saveMember({ email: memberEmail.trim(), name: memberName.trim(), role: memberRole });
+          setMsg('Đã thêm thành viên. Lưu ý: ở bản cloud, thành viên chỉ xem được dữ liệu sau khi người đó đăng ký tài khoản Supabase và được gán quyền — email ở đây dùng để nhận diện trong danh sách.');
+          setMemberEmail(''); setMemberName('');
+        }}>
+          <div className="form-row">
+            <Field label="Email thành viên">
+              <input placeholder="email@vidu.vn" value={memberEmail} onChange={(e) => setMemberEmail(e.target.value)} />
+            </Field>
+            <Field label="Tên hiển thị">
+              <input placeholder="VD: Nguyễn Văn A" value={memberName} onChange={(e) => setMemberName(e.target.value)} />
+            </Field>
+            <Field label="Vai trò">
+              <select value={memberRole} onChange={(e) => setMemberRole(e.target.value as MemberRole)}>
+                {(Object.keys(ROLE_LABELS) as MemberRole[]).map((r) => (
+                  <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          <button type="submit">Thêm thành viên</button>
+        </form>
+        <div className="row-list" style={{ marginTop: 12 }}>
+          {members.map((m) => (
+            <div key={m.id} className="row-item">
+              <span>{m.name ?? m.email ?? m.user_id} <span className="badge">{ROLE_LABELS[m.role]}</span></span>
+              {m.role !== 'owner' ? (
+                <button className="btn-ghost btn-small" onClick={() => {
+                  const err = data.deleteMember(m.id);
+                  if (err) setMsg(err); else setMsg('Đã xóa thành viên.');
+                }}>Xóa</button>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      </GlassCard>
 
       <GlassCard title="Danh mục thu / chi">
         <form className="form-grid" onSubmit={(e) => {
@@ -204,6 +307,7 @@ export default function CaiDat() {
             </div>
           ))}
         </div>
+        <p className="muted" style={{ fontSize: 13 }}>Xóa danh mục thì giao dịch cũ vẫn giữ nguyên, chỉ gỡ liên kết danh mục; ngân sách của danh mục đó cũng bị xóa.</p>
       </GlassCard>
 
       <GlassCard title={`Ngân sách tháng ${month}`}>
@@ -227,6 +331,14 @@ export default function CaiDat() {
           </div>
           <button type="submit">Lưu ngân sách</button>
         </form>
+        <div className="row-list" style={{ marginTop: 12 }}>
+          {monthBudgets.map((b) => (
+            <div key={b.id} className="row-item">
+              <span>{cats.find((c) => c.id === b.category_id)?.name ?? '—'} — {fmtVND(b.amount)}</span>
+              <button className="btn-ghost btn-small" onClick={() => { data.deleteBudget(b.id); setMsg('Đã xóa ngân sách.'); }}>Xóa</button>
+            </div>
+          ))}
+        </div>
       </GlassCard>
 
       <GlassCard title="Tài khoản">
@@ -238,28 +350,28 @@ export default function CaiDat() {
         </form>
         <form className="form-grid" onSubmit={changePassword} style={{ marginTop: 16 }}>
           <div className="form-row">
-            <Field label="Mật khẩu cũ (bản local)">
-              <input type="password" value={oldPw} onChange={(e) => setOldPw(e.target.value)} />
+            <Field label="Mật khẩu cũ">
+              <input type="password" value={oldPw} onChange={(e) => setOldPw(e.target.value)} required />
             </Field>
             <Field label="Mật khẩu mới (≥ 6 ký tự)">
-              <input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} />
+              <input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} required />
             </Field>
           </div>
           <button type="submit">Đổi mật khẩu</button>
+          <p className="muted" style={{ fontSize: 13 }}>Đổi mật khẩu sẽ đăng xuất mọi thiết bị đang đăng nhập.</p>
         </form>
-        <form className="form-grid" onSubmit={(e) => {
-          e.preventDefault();
-          if (!/^\d{4,6}$/.test(pin)) { setMsg('PIN phải là 4–6 chữ số.'); return; }
-          localStorage.setItem('qltc-v2-pin', pin);
-          setMsg('Đã đặt mã PIN khóa màn hình. Tải lại trang để kiểm tra.');
-          setPin('');
-        }} style={{ marginTop: 16 }}>
-          <Field label="Đặt mã PIN khóa màn hình (4–6 số, để trống phần này nếu muốn gỡ)">
-            <input type="password" inputMode="numeric" placeholder="VD: 1234" value={pin} onChange={(e) => setPin(e.target.value)} />
-          </Field>
+        <form className="form-grid" onSubmit={savePin} style={{ marginTop: 16 }}>
+          <div className="form-row">
+            <Field label="PIN cũ (để trống nếu chưa đặt PIN)">
+              <input type="password" inputMode="numeric" placeholder="VD: 1234" value={oldPin} onChange={(e) => setOldPin(e.target.value)} />
+            </Field>
+            <Field label="PIN mới (4–6 số)">
+              <input type="password" inputMode="numeric" placeholder="VD: 5678" value={pin} onChange={(e) => setPin(e.target.value)} required />
+            </Field>
+          </div>
           <div className="flex-row">
-            <button type="submit">Đặt PIN</button>
-            <button type="button" className="btn-secondary" onClick={() => { localStorage.removeItem('qltc-v2-pin'); setMsg('Đã gỡ mã PIN.'); }}>Gỡ PIN</button>
+            <button type="submit">Đặt / Đổi PIN</button>
+            <button type="button" className="btn-secondary" onClick={() => { removePin(); setMsg('Đã gỡ mã PIN.'); }}>Gỡ PIN</button>
           </div>
         </form>
         <div className="flex-row" style={{ marginTop: 16 }}>
@@ -309,13 +421,32 @@ export default function CaiDat() {
                 ))}
               </select>
             </Field>
+            <div className="form-row">
+              <Field label="VAT khoán">
+                <input type="number" step="0.001" min={0} max={1} value={wsVat} onChange={(e) => setWsVat(e.target.value)} />
+              </Field>
+              <Field label="TNCN khoán">
+                <input type="number" step="0.001" min={0} max={1} value={wsTncn} onChange={(e) => setWsTncn(e.target.value)} />
+              </Field>
+            </div>
+            <div className="form-row">
+              <Field label="TNDN">
+                <input type="number" step="0.01" min={0} max={1} value={wsTndn} onChange={(e) => setWsTndn(e.target.value)} />
+              </Field>
+              <Field label="Môn bài / năm (đ)">
+                <input type="number" min={0} value={wsMonBai} onChange={(e) => setWsMonBai(e.target.value)} />
+              </Field>
+            </div>
+            <Field label="Giảm trừ gia cảnh TNCN (đ/tháng)">
+              <input type="number" min={0} value={wsDeduction} onChange={(e) => setWsDeduction(e.target.value)} />
+            </Field>
             <button type="submit">{editingWsId ? 'Lưu thay đổi' : 'Tạo không gian'}</button>
           </form>
         </Modal>
       ) : null}
       {showDelete ? (
         <Modal title="Xóa tài khoản?" onClose={() => setShowDelete(false)}>
-          <p>Hành động này xóa tài khoản đăng nhập. Dữ liệu local của tài khoản cũng bị xóa.</p>
+          <p>Hành động này xóa toàn bộ dữ liệu của tài khoản trên Supabase và đăng xuất. Nhập mật khẩu để xác nhận (bản local).</p>
           <form className="form-grid" onSubmit={(e) => { e.preventDefault(); deleteAccount(); }}>
             <Field label="Nhập mật khẩu để xác nhận">
               <input type="password" value={delPw} onChange={(e) => setDelPw(e.target.value)} required />

@@ -11,7 +11,7 @@ import {
 } from '@/lib/supabase/client';
 import { localResetPassword, localSignIn, localSignUp, getSessionUser, setSessionUser, syncSessionUserFromSupabase } from '@/lib/auth';
 import { DEMO_EMAIL, DEMO_PASSWORD } from '@/lib/demo';
-import { ensureLocalState } from '@/lib/data';
+import { ensureLocalState, seedCloudDemoData } from '@/lib/data';
 import { Field } from '@/components/GlassCard';
 
 type Mode = 'login' | 'register' | 'forgot';
@@ -126,6 +126,16 @@ export default function AuthForm({ showHomeLink = false }: { showHomeLink?: bool
             setMode('login');
             return;
           }
+          // Đăng ký cloud + chọn nạp dữ liệu mẫu: ghi mẫu thật lên Supabase
+          // ngay (trước v5, ô chọn mẫu chỉ hiện ở bản local nên đăng ký cloud
+          // luôn ra workspace trống dù đã tick).
+          if (withDemo) {
+            const appUser = getSessionUser();
+            if (appUser) {
+              const seedErr = await seedCloudDemoData(sb, appUser);
+              if (seedErr) setInfo(`Đăng ký thành công nhưng ${seedErr} Bạn vẫn có thể bấm "Tải dữ liệu mẫu" trong Dashboard.`);
+            }
+          }
           setInfo('Đăng ký thành công. Đang chuyển tới Dashboard…');
           goDashboard();
         } else {
@@ -178,7 +188,30 @@ export default function AuthForm({ showHomeLink = false }: { showHomeLink?: bool
             setError('Đăng nhập demo thành công nhưng chưa lấy được phiên đăng nhập. Hãy thử lại.');
             return;
           }
-          setError('Tài khoản demo chưa có trên Supabase — hãy đăng ký tài khoản thật.');
+          // Tài khoản demo chưa có trên Supabase: tự tạo (seedDemoAccount)
+          // rồi đăng nhập lại — chạy lại không tạo trùng (signUp báo
+          // already-registered thì quay lại đăng nhập).
+          const { error: signUpErr } = await sb.auth.signUp({
+            email: DEMO_EMAIL, password: DEMO_PASSWORD,
+            options: { data: { full_name: 'Người dùng Demo' } },
+          });
+          if (signUpErr && !/already registered|already exists/i.test(signUpErr.message)) {
+            setError('Tài khoản demo chưa có trên Supabase và không tạo được — hãy đăng ký tài khoản thật.');
+            return;
+          }
+          const retry = await sb.auth.signInWithPassword({ email: DEMO_EMAIL, password: DEMO_PASSWORD });
+          if (retry.error || !(await persistCloudSession(sb, retry.data.user))) {
+            setError('Không vào được tài khoản demo trên Supabase. Hãy đăng ký tài khoản thật.');
+            return;
+          }
+          const appUser = getSessionUser();
+          if (appUser) {
+            // Chỉ nạp mẫu khi tài khoản demo chưa có workspace nào (chạy lại
+            // không tạo trùng workspace mẫu mới).
+            const { data: existing } = await sb.from('workspaces').select('id').eq('owner_id', appUser.id).limit(1);
+            if (!existing || existing.length === 0) await seedCloudDemoData(sb, appUser);
+          }
+          goDashboard();
           return;
         }
       }
@@ -243,10 +276,10 @@ export default function AuthForm({ showHomeLink = false }: { showHomeLink?: bool
               onChange={(e) => setConfirm(e.target.value)} required minLength={6} />
           </Field>
         ) : null}
-        {mode === 'register' && !cloud ? (
+        {mode === 'register' ? (
           <label className="check-row">
             <input type="checkbox" checked={withDemo} onChange={(e) => setWithDemo(e.target.checked)} />
-            Nạp sẵn dữ liệu mẫu hộ kinh doanh để trải nghiệm
+            Nạp sẵn dữ liệu mẫu hộ kinh doanh để trải nghiệm (không tick = workspace trống)
           </label>
         ) : null}
         {msg ? <p className={msgKind === 'error' ? 'error' : ''}>{msg}</p> : null}

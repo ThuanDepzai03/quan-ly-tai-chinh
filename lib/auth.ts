@@ -81,7 +81,66 @@ export function syncSessionUserFromSupabase(sbUser: SupabaseUser | null): AppUse
   return user;
 }
 
-/** Đăng ký local. Trả về lỗi (chuỗi) hoặc null khi thành công. */
+/** PIN khóa màn hình (tương đương setPin/changePin/removePin/verifyPin
+ *  của bản demo): PIN 4–6 số, lưu dạng băm SHA-256 + salt, KHÔNG lưu
+ *  PIN dạng text thường. Key cũ 'qltc-v2-pin' (text thường) chỉ còn để
+ *  di trú: lần verify đầu tiên đúng sẽ chuyển sang dạng băm rồi xóa key cũ. */
+const PIN_HASH_KEY = 'qltc-v2-pin-hash';
+const PIN_PLAIN_KEY = 'qltc-v2-pin';
+
+interface PinRecord { hash: string; salt: string; }
+
+function readPinRecord(): PinRecord | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(PIN_HASH_KEY);
+    return raw ? (JSON.parse(raw) as PinRecord) : null;
+  } catch { return null; }
+}
+
+export function hasPin(): boolean {
+  if (typeof window === 'undefined') return false;
+  return Boolean(readPinRecord() || localStorage.getItem(PIN_PLAIN_KEY));
+}
+
+/** Đặt PIN mới. Nếu đã có PIN thì phải nhập đúng PIN cũ (đổi PIN). */
+export async function setPin(newPin: string, oldPin?: string): Promise<string | null> {
+  if (!/^\d{4,6}$/.test(newPin)) return 'PIN phải là 4–6 chữ số.';
+  const existing = readPinRecord();
+  if (existing) {
+    if (!oldPin) return 'Đã có PIN — nhập PIN cũ để đổi.';
+    if ((await hashPassword(oldPin, existing.salt)) !== existing.hash) return 'PIN cũ không đúng.';
+  } else if (localStorage.getItem(PIN_PLAIN_KEY)) {
+    if (!oldPin) return 'Đã có PIN — nhập PIN cũ để đổi.';
+    if (!(await verifyPin(oldPin))) return 'PIN cũ không đúng.';
+  }
+  const salt = Math.random().toString(36).slice(2);
+  const rec: PinRecord = { hash: await hashPassword(newPin, salt), salt };
+  localStorage.setItem(PIN_HASH_KEY, JSON.stringify(rec));
+  localStorage.removeItem(PIN_PLAIN_KEY);
+  return null;
+}
+
+/** Kiểm tra PIN nhập vào. Đúng với PIN text cũ thì di trú sang dạng băm. */
+export async function verifyPin(pin: string): Promise<boolean> {
+  const rec = readPinRecord();
+  if (rec) return (await hashPassword(pin, rec.salt)) === rec.hash;
+  const plain = localStorage.getItem(PIN_PLAIN_KEY);
+  if (plain && pin === plain) {
+    const salt = Math.random().toString(36).slice(2);
+    localStorage.setItem(PIN_HASH_KEY, JSON.stringify({ hash: await hashPassword(pin, salt), salt }));
+    localStorage.removeItem(PIN_PLAIN_KEY);
+    return true;
+  }
+  return false;
+}
+
+/** Gỡ PIN khóa màn hình. */
+export function removePin(): void {
+  localStorage.removeItem(PIN_HASH_KEY);
+  localStorage.removeItem(PIN_PLAIN_KEY);
+}
+
 export async function localSignUp(name: string, email: string, password: string): Promise<string | null> {
   const cleanEmail = email.trim().toLowerCase();
   if (password.length < 6) return 'Mật khẩu phải có ít nhất 6 ký tự.';

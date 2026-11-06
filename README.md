@@ -93,3 +93,16 @@ supabase/schema.sql   16 bảng + RLS + trigger + hàm tax88()
 - Không commit `.env.local`, không đưa `service_role` key vào code client/GitHub public.
 - Mật khẩu/PIN bản local lưu dạng băm SHA-256 + salt; bản deploy dùng Supabase Auth.
 - RLS bật cho cả 16 bảng, chỉ thành viên workspace mới đọc/ghi được dữ liệu của workspace đó.
+
+## 7. v5 — thống nhất với bản demo (06/11/2026)
+Bản v5 đối chiếu đủ 54 actions của bản demo trên Muse (xem bảng trong
+báo cáo bàn giao): thêm thành viên + phân quyền, xóa ngân sách, ảnh sản
+phẩm, đính kèm/quét hóa đơn, đánh dấu thuế trên giao dịch, PIN lưu dạng
+băm, đổi mật khẩu Supabase (kiểm tra mật khẩu cũ + đăng xuất mọi phiên),
+xóa tài khoản (xóa toàn bộ dữ liệu Supabase), đăng ký cloud được chọn
+nạp dữ liệu mẫu, nạp riêng kho mẫu, nhắc nhở hoàn thành có tạo giao dịch
+Chi + dời kỳ. Mọi thay đổi state ở chế độ cloud đều đồng bộ full-state
+lên Supabase (trước đây ví/kho/mục tiêu/nợ/nhắc nhở chỉ lưu local).
+Chạy lại `supabase/schema.sql` trong SQL Editor để thêm các cột mới
+(transactions.to_wallet_id, transactions.receipt_image, products.image,
+workspaces.tncn_deduction) — file dùng IF NOT EXISTS nên chạy lại an toàn.

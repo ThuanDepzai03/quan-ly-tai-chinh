@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import type { AppState, Product, ProductInput } from '@/lib/types';
 import { useAppData } from '@/lib/data';
+import { fileToBase64 } from '@/lib/receipt';
 import { Field } from './GlassCard';
 
 interface VariantRow { id?: string; name: string; cost_price: string; sale_price: string; stock: string; imeis: string; }
@@ -25,6 +26,7 @@ export default function ProductForm({ state, editing, onDone }: {
   const [stock, setStock] = useState(String(editing?.product.stock ?? 0));
   const [minStock, setMinStock] = useState(String(editing?.product.min_stock ?? 0));
   const [custom, setCustom] = useState<Record<string, string>>(editing?.product.custom_values ?? {});
+  const [image, setImage] = useState<string | null>(editing?.product.image ?? null);
   const [variants, setVariants] = useState<VariantRow[]>(
     (editing?.variants ?? []).map((v) => ({
       id: v.id, name: v.name, cost_price: String(v.cost_price),
@@ -50,7 +52,7 @@ export default function ProductForm({ state, editing, onDone }: {
       category_id: categoryId || null,
       cost_price: Number(cost) || 0, sale_price: Number(sale) || 0,
       stock: Number(stock) || 0, min_stock: Number(minStock) || 0,
-      custom_values: custom,
+      custom_values: custom, image,
       variants: variants
         .filter((v) => v.name.trim())
         .map((v) => ({
@@ -98,6 +100,21 @@ export default function ProductForm({ state, editing, onDone }: {
           <input type="number" min={0} value={minStock} onChange={(e) => setMinStock(e.target.value)} />
         </Field>
       </div>
+
+      <Field label="Ảnh sản phẩm (JPEG/PNG, tối đa 2MB)">
+        <div className="flex-row">
+          <label className="btn-secondary" style={{ cursor: 'pointer' }}>
+            📷 Chọn ảnh
+            <input type="file" accept="image/jpeg,image/png" style={{ display: 'none' }} onChange={async (e) => {
+              const f = e.target.files?.[0]; if (!f) return;
+              try { setImage(await fileToBase64(f)); }
+              catch (err) { setErr(err instanceof Error ? err.message : 'Không đọc được ảnh.'); }
+            }} />
+          </label>
+          {image ? <button type="button" className="btn-ghost" onClick={() => setImage(null)}>Gỡ ảnh</button> : null}
+        </div>
+        {image ? <img src={image} alt="Ảnh sản phẩm" style={{ maxWidth: '100%', maxHeight: 160, objectFit: 'contain', borderRadius: 12, marginTop: 8 }} /> : null}
+      </Field>
 
       {enabledFields.length > 0 ? (
         <fieldset className="fieldset">

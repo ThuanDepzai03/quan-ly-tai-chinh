@@ -6,6 +6,13 @@
 
 create extension if not exists "pgcrypto";
 
+-- v5: các cột bổ sung cho tính năng đã có ở bản demo nhưng thiếu ở schema cũ.
+-- Chạy lại toàn bộ file trong SQL Editor là an toàn (IF NOT EXISTS).
+alter table if exists transactions add column if not exists to_wallet_id uuid references wallets(id) on delete set null;
+alter table if exists transactions add column if not exists receipt_image text;
+alter table if exists products add column if not exists image text;
+alter table if exists workspaces add column if not exists tncn_deduction numeric not null default 11000000;
+
 -- ============ KHỐI A: 16 bảng ============
 create table if not exists workspaces (
   id uuid primary key default gen_random_uuid(),

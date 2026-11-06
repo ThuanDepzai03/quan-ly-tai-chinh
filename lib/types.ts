@@ -13,7 +13,7 @@ export type TaxKind = 'VAT' | 'TNCN' | 'TNDN' | 'mon_bai';
 export interface Workspace {
   id: string; owner_id: string; name: string; mode: WorkspaceMode;
   tax_circular: TaxCircular; vat_rate: number; tncn_rate: number;
-  tndn_rate: number; mon_bai: number; created_at: string;
+  tndn_rate: number; mon_bai: number; tncn_deduction?: number; created_at: string;
 }
 export interface Member {
   id: string; workspace_id: string; user_id: string; role: MemberRole;
@@ -28,11 +28,11 @@ export interface Category {
   kind: 'income' | 'expense'; color: string; icon: string;
 }
 export interface Transaction {
-  id: string; workspace_id: string; wallet_id: string; type: TxType;
+  id: string; workspace_id: string; wallet_id: string; to_wallet_id?: string | null; type: TxType;
   amount: number; category_id?: string | null; product_id?: string | null;
   variant_id?: string | null; imei?: string | null; quantity?: number;
   unit_price?: number | null; cost_price?: number | null; profit?: number | null;
-  tax_type?: string | null; tax_rate?: number | null; note?: string | null;
+  tax_type?: string | null; tax_rate?: number | null; receipt_image?: string | null; note?: string | null;
   date: string; created_at?: string;
 }
 export interface Budget { id: string; workspace_id: string; category_id: string; month: string; amount: number; }
@@ -84,14 +84,15 @@ export interface TxInput {
   amount: number; wallet_id: string; to_wallet_id?: string | null;
   category_id?: string | null; product_id?: string | null; variant_id?: string | null;
   imei?: string | null; quantity?: number; unit_price?: number | null;
-  cost_price?: number | null; note?: string; date: string;
+  cost_price?: number | null; tax_type?: string | null; tax_rate?: number | null;
+  receipt_image?: string | null; note?: string; date: string;
 }
 
 /** Dữ liệu đầu vào khi thêm/sửa 1 sản phẩm (kèm danh sách biến thể). */
 export interface ProductInput {
   id?: string; name: string; sku: string; unit: string; category_id?: string | null;
   cost_price: number; sale_price: number; stock: number; min_stock: number;
-  custom_values?: Record<string, string>;
+  custom_values?: Record<string, string>; image?: string | null;
   variants: Array<{ id?: string; name: string; cost_price: number; sale_price: number; stock: number; imeis?: string[] }>;
 }
 

@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useAppData } from '@/lib/data';
-import { setSessionUser } from '@/lib/auth';
+import { setSessionUser, hasPin, verifyPin } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/client';
 import { WORKSPACE_MODE_LABELS } from '@/lib/types';
 
@@ -25,8 +25,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const [pinErr, setPinErr] = useState('');
 
   useEffect(() => {
-    const pin = localStorage.getItem('qltc-v2-pin');
-    if (pin) setPinLocked(true);
+    if (hasPin()) setPinLocked(true);
   }, []);
 
   async function signOut() {
@@ -36,10 +35,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
     location.href = '/auth';
   }
 
-  function unlock(e: React.FormEvent) {
+  async function unlock(e: React.FormEvent) {
     e.preventDefault();
-    const pin = localStorage.getItem('qltc-v2-pin') ?? '';
-    if (pinInput === pin) { setPinLocked(false); setPinErr(''); }
+    if (await verifyPin(pinInput)) { setPinLocked(false); setPinErr(''); }
     else setPinErr('Mã PIN không đúng.');
   }
 
