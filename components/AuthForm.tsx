@@ -316,7 +316,7 @@ export default function AuthForm({ showHomeLink = false }: { showHomeLink?: bool
         {showHomeLink ? (<><br /><Link href="/">← Về trang chủ</Link></>) : null}
       </p>
       <p className="muted" style={{ fontSize: 13 }}>
-        Tài khoản demo: {DEMO_EMAIL} / {DEMO_PASSWORD} — chỉ ở bản demo, không có trong Supabase.
+        Trang web được phát triển bởi <a href="https://www.facebook.com/Theplay.Hacker.ss/" target="_blank" rel="noopener noreferrer">Thuận</a> — Tham gia nhóm phát triển đa ngành tại  <a href="https://discord.gg/GDCm4WaR9" target="_blank" rel="noopener noreferrer">Discord</a>
       </p>
     </div>
   );
