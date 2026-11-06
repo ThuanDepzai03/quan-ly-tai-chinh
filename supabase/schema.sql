@@ -218,6 +218,10 @@ alter table transactions
   add column if not exists note text,
   add column if not exists date date not null default current_date,
   add column if not exists created_at timestamptz default now();
+-- Một số database cũ có cột transactions.kind NOT NULL; ứng dụng hiện dùng
+-- transactions.type. Cho phép cột legacy để trống để không chặn giao dịch mới.
+alter table transactions add column if not exists kind text;
+alter table transactions alter column kind drop not null;
 alter table budgets
   add column if not exists workspace_id uuid references workspaces(id) on delete cascade,
   add column if not exists category_id uuid references categories(id) on delete cascade,
@@ -306,10 +310,10 @@ create index if not exists idx_variants_product on product_variants(product_id);
 create index if not exists idx_wallets_ws on wallets(workspace_id);
 
 -- ============ KHỐI B: helper + RLS cho cả 16 bảng ============
-create or replace function is_workspace_member(ws uuid)
+create or replace function is_workspace_member(wid uuid)
 returns boolean language sql stable as $$
-  select exists (select 1 from members where workspace_id = ws and user_id = auth.uid())
-      or exists (select 1 from workspaces where id = ws and owner_id = auth.uid());
+  select exists (select 1 from members where workspace_id = wid and user_id = auth.uid())
+      or exists (select 1 from workspaces where id = wid and owner_id = auth.uid());
 $$;
 
 -- Bật RLS cho mọi bảng có workspace_id (trừ product_variants nối qua products).
