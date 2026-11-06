@@ -1,17 +1,10 @@
 -- Quản lý tài chính — Supabase schema (Postgres)
 -- Chạy toàn bộ file 1 lần trong SQL Editor. Region khuyên dùng: Singapore.
--- Gồm: 16 bảng + RLS cho cả 16 bảng + trigger trừ/cộng tồn kho + hàm tính thuế.
+-- Gồm: 16 bảng + RLS cho cả 16 bảng + hàm tính thuế.
 -- Tài khoản demo demo@quanlytaichinh.vn / 123456 CHỈ ở bản demo local,
 -- không có trong Supabase — hãy đăng ký tài khoản thật qua Supabase Auth.
 
 create extension if not exists "pgcrypto";
-
--- v5: các cột bổ sung cho tính năng đã có ở bản demo nhưng thiếu ở schema cũ.
--- Chạy lại toàn bộ file trong SQL Editor là an toàn (IF NOT EXISTS).
-alter table if exists transactions add column if not exists to_wallet_id uuid references wallets(id) on delete set null;
-alter table if exists transactions add column if not exists receipt_image text;
-alter table if exists products add column if not exists image text;
-alter table if exists workspaces add column if not exists tncn_deduction numeric not null default 11000000;
 
 -- ============ KHỐI A: 16 bảng ============
 create table if not exists workspaces (
@@ -174,6 +167,138 @@ create table if not exists tax_settings (
   mon_bai numeric not null default 1000000
 );
 
+-- Nâng cấp các bảng đã tồn tại từ schema cũ. CREATE TABLE IF NOT EXISTS không
+-- bổ sung cột còn thiếu, vì vậy các cột ứng dụng đang dùng phải được khai báo
+-- lại bằng ALTER ... IF NOT EXISTS để có thể chạy an toàn nhiều lần.
+alter table workspaces
+  add column if not exists owner_id uuid references auth.users(id) on delete cascade,
+  add column if not exists name text not null default 'Không gian của tôi',
+  add column if not exists mode text not null default 'household',
+  add column if not exists tax_circular text not null default 'TT88/2021',
+  add column if not exists vat_rate numeric not null default 0.01,
+  add column if not exists tncn_rate numeric not null default 0.005,
+  add column if not exists tndn_rate numeric not null default 0.20,
+  add column if not exists mon_bai numeric not null default 1000000,
+  add column if not exists tncn_deduction numeric not null default 11000000,
+  add column if not exists created_at timestamptz default now();
+alter table members
+  add column if not exists workspace_id uuid references workspaces(id) on delete cascade,
+  add column if not exists user_id uuid references auth.users(id) on delete cascade,
+  add column if not exists role text not null default 'member';
+alter table wallets
+  add column if not exists workspace_id uuid references workspaces(id) on delete cascade,
+  add column if not exists name text not null default 'Ví mới',
+  add column if not exists type text not null default 'cash',
+  add column if not exists balance numeric not null default 0,
+  add column if not exists currency text not null default 'VND',
+  add column if not exists created_at timestamptz default now();
+alter table categories
+  add column if not exists workspace_id uuid references workspaces(id) on delete cascade,
+  add column if not exists name text not null default 'Danh mục mới',
+  add column if not exists kind text not null default 'expense',
+  add column if not exists color text,
+  add column if not exists icon text;
+alter table transactions
+  add column if not exists workspace_id uuid references workspaces(id) on delete cascade,
+  add column if not exists wallet_id uuid references wallets(id) on delete set null,
+  add column if not exists to_wallet_id uuid references wallets(id) on delete set null,
+  add column if not exists category_id uuid references categories(id) on delete set null,
+  add column if not exists product_id uuid,
+  add column if not exists variant_id uuid,
+  add column if not exists imei text,
+  add column if not exists type text not null default 'expense',
+  add column if not exists amount numeric not null default 0,
+  add column if not exists quantity numeric not null default 1,
+  add column if not exists unit_price numeric,
+  add column if not exists cost_price numeric,
+  add column if not exists profit numeric,
+  add column if not exists tax_type text,
+  add column if not exists tax_rate numeric,
+  add column if not exists receipt_image text,
+  add column if not exists note text,
+  add column if not exists date date not null default current_date,
+  add column if not exists created_at timestamptz default now();
+alter table budgets
+  add column if not exists workspace_id uuid references workspaces(id) on delete cascade,
+  add column if not exists category_id uuid references categories(id) on delete cascade,
+  add column if not exists month text not null default to_char(current_date, 'YYYY-MM'),
+  add column if not exists amount numeric not null default 0;
+alter table goals
+  add column if not exists workspace_id uuid references workspaces(id) on delete cascade,
+  add column if not exists name text not null default 'Mục tiêu mới',
+  add column if not exists target numeric not null default 0,
+  add column if not exists saved numeric not null default 0,
+  add column if not exists deadline date;
+alter table debts
+  add column if not exists workspace_id uuid references workspaces(id) on delete cascade,
+  add column if not exists name text not null default 'Khoản nợ mới',
+  add column if not exists kind text not null default 'borrow',
+  add column if not exists amount numeric not null default 0,
+  add column if not exists paid numeric not null default 0,
+  add column if not exists due_date date;
+alter table reminders
+  add column if not exists workspace_id uuid references workspaces(id) on delete cascade,
+  add column if not exists title text not null default 'Nhắc việc mới',
+  add column if not exists amount numeric,
+  add column if not exists next_date date default current_date,
+  add column if not exists frequency text not null default 'monthly';
+alter table product_categories
+  add column if not exists workspace_id uuid references workspaces(id) on delete cascade,
+  add column if not exists name text not null default 'Danh mục mới',
+  add column if not exists color text,
+  add column if not exists icon text;
+alter table products
+  add column if not exists workspace_id uuid references workspaces(id) on delete cascade,
+  add column if not exists category_id uuid references product_categories(id) on delete set null,
+  add column if not exists name text not null default 'Sản phẩm mới',
+  add column if not exists sku text,
+  add column if not exists unit text not null default 'cái',
+  add column if not exists cost_price numeric not null default 0,
+  add column if not exists sale_price numeric not null default 0,
+  add column if not exists stock numeric not null default 0,
+  add column if not exists min_stock numeric not null default 0,
+  add column if not exists custom_values jsonb not null default '{}'::jsonb,
+  add column if not exists image text,
+  add column if not exists created_at timestamptz default now();
+alter table product_variants
+  add column if not exists product_id uuid references products(id) on delete cascade,
+  add column if not exists name text not null default 'Biến thể mới',
+  add column if not exists cost_price numeric not null default 0,
+  add column if not exists sale_price numeric not null default 0,
+  add column if not exists stock numeric not null default 0,
+  add column if not exists imeis text[] not null default '{}';
+alter table product_fields
+  add column if not exists workspace_id uuid references workspaces(id) on delete cascade,
+  add column if not exists name text not null default 'Thuộc tính mới',
+  add column if not exists field_type text not null default 'text',
+  add column if not exists required boolean not null default false,
+  add column if not exists enabled boolean not null default true,
+  add column if not exists options jsonb;
+alter table stock_movements
+  add column if not exists workspace_id uuid references workspaces(id) on delete cascade,
+  add column if not exists product_id uuid references products(id) on delete cascade,
+  add column if not exists variant_id uuid references product_variants(id) on delete set null,
+  add column if not exists kind text not null default 'in',
+  add column if not exists quantity numeric not null default 0,
+  add column if not exists imei text,
+  add column if not exists note text,
+  add column if not exists created_at timestamptz default now();
+alter table tax_payments
+  add column if not exists workspace_id uuid references workspaces(id) on delete cascade,
+  add column if not exists tax_type text not null default 'VAT',
+  add column if not exists period text not null default to_char(current_date, 'YYYY-MM'),
+  add column if not exists amount numeric not null default 0,
+  add column if not exists paid boolean not null default false,
+  add column if not exists due_date date,
+  add column if not exists note text;
+alter table tax_settings
+  add column if not exists workspace_id uuid references workspaces(id) on delete cascade,
+  add column if not exists circular text not null default 'TT88/2021',
+  add column if not exists vat_rate numeric not null default 0.01,
+  add column if not exists tncn_rate numeric not null default 0.005,
+  add column if not exists tndn_rate numeric not null default 0.20,
+  add column if not exists mon_bai numeric not null default 1000000;
+
 create index if not exists idx_tx_ws_date on transactions(workspace_id, date desc);
 create index if not exists idx_tx_product on transactions(product_id);
 create index if not exists idx_products_ws on products(workspace_id);
@@ -181,10 +306,10 @@ create index if not exists idx_variants_product on product_variants(product_id);
 create index if not exists idx_wallets_ws on wallets(workspace_id);
 
 -- ============ KHỐI B: helper + RLS cho cả 16 bảng ============
-create or replace function is_workspace_member(wid uuid)
+create or replace function is_workspace_member(ws uuid)
 returns boolean language sql stable as $$
-  select exists (select 1 from members where workspace_id = wid and user_id = auth.uid())
-      or exists (select 1 from workspaces where id = wid and owner_id = auth.uid());
+  select exists (select 1 from members where workspace_id = ws and user_id = auth.uid())
+      or exists (select 1 from workspaces where id = ws and owner_id = auth.uid());
 $$;
 
 -- Bật RLS cho mọi bảng có workspace_id (trừ product_variants nối qua products).
@@ -238,31 +363,10 @@ begin
   end;
 end $$;
 
--- ============ KHỐI C: trigger trừ/cộng tồn kho (chặn âm kho) ============
-create or replace function apply_stock() returns trigger language plpgsql as $$
-begin
-  if new.kind = 'out' then
-    update products set stock = greatest(0, stock - new.quantity) where id = new.product_id;
-    if new.variant_id is not null then
-      update product_variants set stock = greatest(0, stock - new.quantity) where id = new.variant_id;
-      if new.imei is not null then
-        update product_variants set imeis = array_remove(imeis, new.imei) where id = new.variant_id;
-      end if;
-    end if;
-  else
-    update products set stock = stock + new.quantity where id = new.product_id;
-    if new.variant_id is not null then
-      update product_variants set stock = stock + new.quantity where id = new.variant_id;
-      if new.imei is not null then
-        update product_variants set imeis = array_append(imeis, new.imei) where id = new.variant_id;
-      end if;
-    end if;
-  end if;
-  return new;
-end $$;
+-- ============ KHỐI C: tồn kho được cập nhật cùng state trong ứng dụng ============
+-- Không cộng/trừ stock lần thứ hai ở DB: giao dịch bán/nhập đã cập nhật stock
+-- và IMEI trong state trước khi đồng bộ cả products lẫn stock_movements.
 drop trigger if exists trg_stock on stock_movements;
-create trigger trg_stock after insert on stock_movements
-  for each row execute function apply_stock();
 
 -- ============ KHỐI D: hàm tính thuế TT88 (dùng ở SQL khi cần) ============
 create or replace function tax88(revenue numeric, vat_rate numeric default 0.01, tncn_rate numeric default 0.005)

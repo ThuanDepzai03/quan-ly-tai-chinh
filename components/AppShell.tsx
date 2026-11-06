@@ -18,7 +18,7 @@ const NAV = [
 
 /** Khung chung cho các trang đã đăng nhập: header, chuyển workspace, menu. */
 export default function AppShell({ children }: { children: ReactNode }) {
-  const { state, loading, switchWorkspace, currentWorkspace } = useAppData();
+  const { state, loading, switchWorkspace, currentWorkspace, syncError, clearSyncError } = useAppData();
   const pathname = usePathname();
   const router = useRouter();
   const [pinLocked, setPinLocked] = useState(false);
@@ -98,6 +98,14 @@ export default function AppShell({ children }: { children: ReactNode }) {
           Không gian: <b style={{ color: 'var(--text)' }}>{currentWorkspace.name}</b>
           {' '}• Chế độ thuế: {currentWorkspace.tax_circular}
         </p>
+      ) : null}
+      {syncError ? (
+        <div className="sync-error" role="alert">
+          <span>{syncError}</span>
+          <button type="button" className="btn-ghost btn-small" onClick={clearSyncError} aria-label="Đóng thông báo lỗi">
+            Đóng
+          </button>
+        </div>
       ) : null}
       {children}
       {/* Tab bar nổi ở dưới kiểu iOS 27 Liquid Glass — giống bản demo trên Muse. */}

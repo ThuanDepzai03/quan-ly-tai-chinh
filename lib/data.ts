@@ -2,7 +2,9 @@
 // - Có Supabase + đã đăng nhập  -> đọc/ghi qua Supabase (RLS bảo vệ theo workspace).
 // - Chưa có Supabase (bản demo) -> dữ liệu lưu localStorage theo từng tài khoản.
 // Mọi trang đều dùng hook useAppData() nên không cần tự gọi Supabase lẻ tẻ.
-import { useCallback, useEffect, useRef, useState } from 'react';
+'use client';
+
+import { createContext, createElement, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import type {
   AppState, AppUser, Budget, Category, Debt, Goal, Member, Product,
   ProductCategory, ProductField, ProductInput, ProductVariant, Reminder, StockMovement,
@@ -72,14 +74,15 @@ export async function seedCloudDemoData(sb: NonNullable<ReturnType<typeof create
 }
 
 async function upsertCloudStateRows(sb: NonNullable<ReturnType<typeof createClient>>, s: AppState): Promise<void> {
-  // Mỗi bảng upsert riêng và lỗi của 1 bảng không chặn các bảng khác.
-  // Đặc biệt bảng members để CUỐI: thành viên mời (user_id tự sinh, chưa
-  // phải tài khoản Supabase thật) sẽ lỗi khóa ngoại auth.users — chỉ log,
-  // không được làm hỏng đồng bộ ví/giao dịch/kho.
-  const upsert = async (table: TableName, rows: Array<Record<string, unknown>>) => {
+  // Members are written last because invited users may not exist in auth.users.
+  const upsert = async (table: TableName, rows: Array<Record<string, unknown>>, ignoreError = false) => {
     if (rows.length === 0) return;
     const { error } = await sb.from(table).upsert(rows as never);
-    if (error) console.error(`Supabase upsert ${table} lỗi:`, error.message);
+    if (error) {
+      const message = `Supabase upsert ${table} lỗi: ${error.message}`;
+      if (ignoreError) { console.error(message); return; }
+      throw new Error(message);
+    }
   };
   await upsert('workspaces', s.workspaces as unknown as Array<Record<string, unknown>>);
   await upsert('wallets', s.wallets as unknown as Array<Record<string, unknown>>);
@@ -95,7 +98,7 @@ async function upsertCloudStateRows(sb: NonNullable<ReturnType<typeof createClie
   await upsert('reminders', s.reminders as unknown as Array<Record<string, unknown>>);
   await upsert('stock_movements', s.stockMovements as unknown as Array<Record<string, unknown>>);
   await upsert('tax_payments', s.taxPayments as unknown as Array<Record<string, unknown>>);
-  await upsert('members', s.members.map((m) => ({ id: m.id, workspace_id: m.workspace_id, user_id: m.user_id, role: m.role })));
+  await upsert('members', s.members.map((m) => ({ id: m.id, workspace_id: m.workspace_id, user_id: m.user_id, role: m.role })), true);
 }
 
 async function deleteCloudWorkspaceRows(sb: NonNullable<ReturnType<typeof createClient>>, wsIds: string[], productIds: string[]): Promise<void> {
@@ -121,39 +124,41 @@ export interface AppData {
   state: AppState | null;
   loading: boolean;
   mode: 'local' | 'cloud';
+  syncError: string;
+  clearSyncError: () => void;
   currentWorkspace: Workspace | null;
   switchWorkspace: (id: string) => void;
   saveWorkspace: (input: { id?: string; name: string; mode: WorkspaceMode; tax_circular: TaxCircular; vat_rate?: number; tncn_rate?: number; tndn_rate?: number; mon_bai?: number; tncn_deduction?: number }) => Promise<string | null>;
-  saveMember: (input: { id?: string; email: string; name: string; role: Member['role'] }) => void;
+  saveMember: (input: { id?: string; email: string; name: string; role: Member['role'] }) => Promise<string | null>;
   deleteMember: (id: string) => string | null;
   deleteWorkspace: (id: string) => string | null;
   saveWallet: (input: { id?: string; name: string; type: Wallet['type']; balance: number }) => Promise<string | null>;
   deleteWallet: (id: string) => void;
-  saveCategory: (input: { id?: string; name: string; kind: 'income' | 'expense'; color: string; icon: string }) => void;
+  saveCategory: (input: { id?: string; name: string; kind: 'income' | 'expense'; color: string; icon: string }) => Promise<string | null>;
   deleteCategory: (id: string) => void;
-  addTransaction: (input: TxInput) => string | null;
+  addTransaction: (input: TxInput) => Promise<string | null>;
   deleteTransaction: (id: string) => void;
-  saveBudget: (categoryId: string, month: string, amount: number) => void;
+  saveBudget: (categoryId: string, month: string, amount: number) => Promise<string | null>;
   deleteBudget: (id: string) => void;
-  saveGoal: (input: { id?: string; name: string; target: number; saved: number; deadline?: string | null }) => void;
+  saveGoal: (input: { id?: string; name: string; target: number; saved: number; deadline?: string | null }) => Promise<string | null>;
   contributeGoal: (id: string, amount: number) => void;
   deleteGoal: (id: string) => void;
-  saveDebt: (input: { id?: string; name: string; kind: Debt['kind']; amount: number; paid: number; due_date?: string | null }) => void;
+  saveDebt: (input: { id?: string; name: string; kind: Debt['kind']; amount: number; paid: number; due_date?: string | null }) => Promise<string | null>;
   payDebt: (id: string, amount: number) => void;
   deleteDebt: (id: string) => void;
-  saveReminder: (input: { id?: string; title: string; amount?: number | null; next_date: string; frequency: Reminder['frequency'] }) => void;
+  saveReminder: (input: { id?: string; title: string; amount?: number | null; next_date: string; frequency: Reminder['frequency'] }) => Promise<string | null>;
   /** Đánh dấu nhắc đã xử lý: dời sang kỳ tiếp; nếu opts.createExpense thì
    *  ghi thêm 1 giao dịch Chi tương ứng (số tiền của nhắc, ví opts.walletId). */
   completeReminder: (id: string, opts?: { createExpense?: boolean; walletId?: string | null }) => void;
   deleteReminder: (id: string) => void;
-  saveProduct: (input: ProductInput) => void;
+  saveProduct: (input: ProductInput) => Promise<string | null>;
   deleteProduct: (id: string) => void;
-  importStock: (input: { product_id: string; variant_id?: string | null; quantity: number; cost_price: number; wallet_id: string; imeis?: string[]; note?: string }) => string | null;
-  saveProductCategory: (input: { id?: string; name: string; color: string; icon: string }) => void;
+  importStock: (input: { product_id: string; variant_id?: string | null; quantity: number; cost_price: number; wallet_id: string; imeis?: string[]; note?: string }) => Promise<string | null>;
+  saveProductCategory: (input: { id?: string; name: string; color: string; icon: string }) => Promise<string | null>;
   deleteProductCategory: (id: string) => void;
-  saveProductField: (input: { id?: string; name: string; field_type: ProductField['field_type']; required: boolean; enabled: boolean; options?: string[] | null }) => void;
+  saveProductField: (input: { id?: string; name: string; field_type: ProductField['field_type']; required: boolean; enabled: boolean; options?: string[] | null }) => Promise<string | null>;
   deleteProductField: (id: string) => void;
-  saveTaxPayment: (input: { id?: string; tax_type: TaxPayment['tax_type']; period: string; amount: number; paid: boolean; due_date?: string | null; note?: string | null }) => void;
+  saveTaxPayment: (input: { id?: string; tax_type: TaxPayment['tax_type']; period: string; amount: number; paid: boolean; due_date?: string | null; note?: string | null }) => Promise<string | null>;
   toggleTaxPaid: (id: string) => void;
   deleteTaxPayment: (id: string) => void;
   updateTaxSettings: (patch: Partial<Pick<Workspace, 'tax_circular' | 'vat_rate' | 'tncn_rate' | 'tndn_rate' | 'mon_bai' | 'tncn_deduction'>>) => void;
@@ -172,14 +177,18 @@ export interface AppData {
   clearSampleData: () => Promise<string | null>;
 }
 
-export function useAppData(): AppData {
+const AppDataContext = createContext<AppData | null>(null);
+
+function useAppDataState(): AppData {
   const [state, setState] = useState<AppState | null>(null);
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<'local' | 'cloud'>('local');
+  const [syncError, setSyncError] = useState('');
   const stateRef = useRef<AppState | null>(null);
   stateRef.current = state;
   const modeRef = useRef<'local' | 'cloud'>('local');
   modeRef.current = mode;
+  const syncQueueRef = useRef<Promise<void>>(Promise.resolve());
   // Tăng khi Supabase báo session đổi sang user khác (SIGNED_IN) để tải
   // lại dữ liệu cho đúng user. TOKEN_REFRESHED cùng user thì không tải lại.
   const [authTick, setAuthTick] = useState(0);
@@ -235,11 +244,13 @@ export function useAppData(): AppData {
           // user ở đây chính là user đã đồng bộ từ Supabase session ở trên.
           const cloudUser: AppUser = user;
           const results = await Promise.all(
-            TABLES.map(async (table) => ({
-              table,
-              data: (await sb.from(table).select('*')).data ?? [],
-            })),
+            TABLES.map(async (table) => {
+              const { data, error } = await sb.from(table).select('*');
+              return { table, data: data ?? [], error };
+            }),
           );
+          const failedQuery = results.find((result) => result.error);
+          if (failedQuery?.error) throw new Error(`${failedQuery.table}: ${failedQuery.error.message}`);
           const loaded: Partial<AppState> = { user: cloudUser };
           for (const { table, data } of results) {
             const key = (Object.keys(STATE_TO_TABLE).find((k) => STATE_TO_TABLE[k] === table) ?? table) as keyof AppState;
@@ -270,7 +281,20 @@ export function useAppData(): AppData {
             setLoading(false);
             return;
           }
-        } catch { /* rơi xuống bản local */ }
+        } catch (error) {
+          if (!cancelled) {
+            const message = error instanceof Error ? error.message : String(error);
+            setMode('cloud');
+            setState(emptyState(user));
+            setSyncError(
+              /schema cache|column .* does not exist|could not find the .* column/i.test(message)
+                ? `Cấu trúc Supabase chưa được cập nhật: ${message}. Hãy chạy lại supabase/schema.sql trong SQL Editor rồi tải lại trang.`
+                : `Không tải được dữ liệu từ Supabase: ${message}`,
+            );
+            setLoading(false);
+          }
+          return;
+        }
       }
       if (!cancelled) {
         setMode('local');
@@ -287,28 +311,53 @@ export function useAppData(): AppData {
   // mục tiêu, nợ, nhắc nhở... chỉ đổi ở local, F5 là mất.
   // cloudOps vẫn được chạy (dùng cho các DELETE tường minh: upsert không
   // xóa được dòng đã gỡ khỏi state).
-  const update = useCallback((fn: (prev: AppState) => AppState, cloudOps?: Array<() => Promise<unknown>>) => {
+  const update = useCallback((fn: (prev: AppState) => AppState, cloudOps?: Array<() => Promise<unknown>>): Promise<string | null> => {
     const prev = stateRef.current;
-    if (!prev) return;
+    if (!prev) return Promise.resolve('Dữ liệu chưa sẵn sàng.');
     const next = fn(prev);
+    stateRef.current = next;
     setState(next);
     if (mode === 'local') saveLocal(next);
     if (mode === 'cloud') {
-      const sb = createClient();
-      if (sb) upsertCloudStateRows(sb, next).catch((e: unknown) => console.error('Supabase sync lỗi:', e));
-      if (cloudOps) for (const op of cloudOps) op().catch((e: unknown) => console.error('Supabase sync lỗi:', e));
+      const task = syncQueueRef.current.then(async () => {
+        const sb = createClient();
+        if (!sb) throw new Error('Chưa cấu hình kết nối Supabase.');
+        await upsertCloudStateRows(sb, next);
+        if (cloudOps) await Promise.all(cloudOps.map((op) => op()));
+      }).then(() => {
+        setSyncError('');
+        return null;
+      }).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error('Supabase sync lỗi:', message);
+        const displayedMessage =
+          /schema cache|column .* does not exist|could not find the .* column/i.test(message)
+            ? `Cấu trúc Supabase chưa được cập nhật: ${message}. Hãy chạy lại supabase/schema.sql trong SQL Editor rồi tải lại trang.`
+            : message;
+        setSyncError(displayedMessage);
+        if (stateRef.current === next) {
+          stateRef.current = prev;
+          setState(prev);
+        }
+        return displayedMessage;
+      });
+      syncQueueRef.current = task.then(() => undefined);
+      return task;
     }
+    return Promise.resolve(null);
   }, [mode]);
 
   const cloudUpsert = useCallback((table: TableName, row: Record<string, unknown>) => async () => {
     const sb = createClient();
     if (!sb) return;
-    await sb.from(table).upsert(row as never);
+    const { error } = await sb.from(table).upsert(row as never);
+    if (error) throw new Error(`Supabase upsert ${table} lỗi: ${error.message}`);
   }, []);
   const cloudDelete = useCallback((table: TableName, id: string) => async () => {
     const sb = createClient();
     if (!sb) return;
-    await sb.from(table).delete().eq('id', id);
+    const { error } = await sb.from(table).delete().eq('id', id);
+    if (error) throw new Error(`Supabase delete ${table} lỗi: ${error.message}`);
   }, []);
 
   const currentWorkspace = state?.workspaces.find((w) => w.id === state.currentWorkspaceId) ?? null;
@@ -377,7 +426,7 @@ export function useAppData(): AppData {
   }, [deleteCloudWorkspaceData, upsertCloudState]);
 
   const api: AppData = {
-    state, loading, mode, currentWorkspace,
+    state, loading, mode, syncError, clearSyncError: () => setSyncError(''), currentWorkspace,
     switchWorkspace: (id) => update((p) => ({ ...p, currentWorkspaceId: id })),
     saveWorkspace: async (input) => {
       const current = stateRef.current;
@@ -406,20 +455,8 @@ export function useAppData(): AppData {
           created_at: new Date().toISOString(),
         };
       }
-      if (modeRef.current === 'cloud') {
-        const sb = createClient();
-        if (!sb) return 'Chưa cấu hình kết nối Supabase.';
-        const { error } = await sb.from('workspaces').upsert(workspace);
-        if (error) {
-          const message = error.message.toLowerCase();
-          if (message.includes('tncn_deduction') && (message.includes('column') || message.includes('schema cache'))) {
-            return 'Cơ sở dữ liệu Supabase đang thiếu cột tncn_deduction. Hãy chạy lại file supabase/schema.sql trong Supabase SQL Editor rồi thử lưu lại.';
-          }
-          return `Không lưu được không gian lên Supabase: ${error.message}`;
-        }
-      }
       if (input.id) {
-        update((pr) => ({
+        return await update((pr) => ({
           ...pr,
           workspaces: pr.workspaces.map((w) => (w.id === input.id ? workspace : w)),
         }));
@@ -428,26 +465,32 @@ export function useAppData(): AppData {
           id: uid(), workspace_id: workspace.id, user_id: user.id,
           role: 'owner', email: user.email, name: user.name,
         };
-        update((pr) => ({
+        return await update((pr) => ({
           ...pr,
           workspaces: [...pr.workspaces, workspace],
           members: [...pr.members, member],
           currentWorkspaceId: workspace.id,
         }));
       }
-      return null;
     },
     saveMember: (input) => {
-      const pr = stateRef.current; if (!pr || !pr.currentWorkspaceId) return;
+      const pr = stateRef.current; if (!pr || !pr.currentWorkspaceId) return Promise.resolve('Bạn cần tạo hoặc chọn không gian làm việc trước.');
       const email = input.email.trim().toLowerCase();
-      if (!email) return;
+      if (!email) return Promise.resolve('Nhập email thành viên.');
       if (input.id) {
-        update((prev) => ({ ...prev, members: prev.members.map((m) => (m.id === input.id ? { ...m, email, name: input.name.trim(), role: input.role } : m)) }),
-          [cloudUpsert('members', { id: input.id, workspace_id: pr.currentWorkspaceId, user_id: pr.members.find((m) => m.id === input.id)?.user_id ?? uid(), role: input.role })]);
+        const existing = pr.members.find((member) => member.id === input.id);
+        if (!existing) return Promise.resolve('Không tìm thấy thành viên cần cập nhật.');
+        return update((prev) => ({ ...prev, members: prev.members.map((m) => (m.id === input.id ? { ...m, email, name: input.name.trim(), role: input.role } : m)) }),
+          [cloudUpsert('members', { id: input.id, workspace_id: pr.currentWorkspaceId, user_id: existing.user_id, role: input.role })]);
       } else {
-        if (pr.members.some((m) => m.workspace_id === pr.currentWorkspaceId && m.email?.toLowerCase() === email)) return;
+        if (modeRef.current === 'cloud') {
+          return Promise.resolve('Chưa thể mời thành viên mới từ website: cần tạo tài khoản Supabase trước để gán user_id hợp lệ.');
+        }
+        if (pr.members.some((m) => m.workspace_id === pr.currentWorkspaceId && m.email?.toLowerCase() === email)) {
+          return Promise.resolve('Email này đã có trong danh sách thành viên.');
+        }
         const m: Member = { id: uid(), workspace_id: pr.currentWorkspaceId, user_id: uid(), role: input.role, email, name: input.name.trim() || email };
-        update((prev) => ({ ...prev, members: [...prev.members, m] }),
+        return update((prev) => ({ ...prev, members: [...prev.members, m] }),
           [cloudUpsert('members', { id: m.id, workspace_id: m.workspace_id, user_id: m.user_id, role: m.role })]);
       }
     },
@@ -494,19 +537,12 @@ export function useAppData(): AppData {
           type: input.type, balance: input.balance, currency: 'VND',
         };
       }
-      if (modeRef.current === 'cloud') {
-        const sb = createClient();
-        if (!sb) return 'Chưa cấu hình kết nối Supabase.';
-        const { error } = await sb.from('wallets').upsert(wallet);
-        if (error) return `Không lưu được ví lên Supabase: ${error.message}`;
-      }
-      update((prev) => ({
+      return await update((prev) => ({
         ...prev,
         wallets: input.id
           ? prev.wallets.map((w) => (w.id === input.id ? wallet : w))
           : [...prev.wallets, wallet],
       }));
-      return null;
     },
     deleteWallet: (id) => {
       const txIds = (stateRef.current?.transactions ?? []).filter((t) => t.wallet_id === id).map((t) => t.id);
@@ -516,13 +552,13 @@ export function useAppData(): AppData {
       }), [cloudDelete('wallets', id), ...txIds.map((tid) => cloudDelete('transactions', tid))]);
     },
     saveCategory: (input) => {
-      const p = stateRef.current; if (!p || !p.currentWorkspaceId) return;
+      const p = stateRef.current; if (!p || !p.currentWorkspaceId) return Promise.resolve('Bạn cần tạo hoặc chọn không gian làm việc trước.');
       if (input.id) {
-        update((prev) => ({ ...prev, categories: prev.categories.map((c) => (c.id === input.id ? { ...c, ...input } : c)) }),
+        return update((prev) => ({ ...prev, categories: prev.categories.map((c) => (c.id === input.id ? { ...c, ...input } : c)) }),
           [cloudUpsert('categories', { ...input, workspace_id: p.currentWorkspaceId })]);
       } else {
         const c: Category = { id: uid(), workspace_id: p.currentWorkspaceId, ...input };
-        update((prev) => ({ ...prev, categories: [...prev.categories, c] }), [cloudUpsert('categories', c as unknown as Record<string, unknown>)]);
+        return update((prev) => ({ ...prev, categories: [...prev.categories, c] }), [cloudUpsert('categories', c as unknown as Record<string, unknown>)]);
       }
     },
     deleteCategory: (id) => {
@@ -533,7 +569,7 @@ export function useAppData(): AppData {
         budgets: p.budgets.filter((b) => b.category_id !== id),
       }), [cloudDelete('categories', id), ...budgetIds.map((bid) => cloudDelete('budgets', bid))]);
     },
-    addTransaction: (input) => {
+    addTransaction: async (input) => {
       const p = stateRef.current; if (!p || !p.currentWorkspaceId) return 'Chưa chọn không gian.';
       const wallet = p.wallets.find((w) => w.id === input.wallet_id);
       if (!wallet) return 'Chưa chọn ví.';
@@ -569,7 +605,7 @@ export function useAppData(): AppData {
           imei: tx.imei, note: tx.note, created_at: tx.created_at ?? new Date().toISOString(),
         });
       }
-      update((prev) => {
+      return await update((prev) => {
         const wallets = prev.wallets.map((w) => {
           if (w.id === input.wallet_id) {
             const delta = input.type === 'income' ? input.amount : -input.amount;
@@ -637,24 +673,24 @@ export function useAppData(): AppData {
     },
     deleteBudget: (id) => update((p) => ({ ...p, budgets: p.budgets.filter((b) => b.id !== id) }), [cloudDelete('budgets', id)]),
     saveBudget: (categoryId, month, amount) => {
-      const p = stateRef.current; if (!p || !p.currentWorkspaceId) return;
+      const p = stateRef.current; if (!p || !p.currentWorkspaceId) return Promise.resolve('Bạn cần tạo hoặc chọn không gian làm việc trước.');
       const existing = p.budgets.find((b) => b.category_id === categoryId && b.month === month);
       if (existing) {
-        update((prev) => ({ ...prev, budgets: prev.budgets.map((b) => (b.id === existing.id ? { ...b, amount } : b)) }),
+        return update((prev) => ({ ...prev, budgets: prev.budgets.map((b) => (b.id === existing.id ? { ...b, amount } : b)) }),
           [cloudUpsert('budgets', { ...existing, amount })]);
       } else {
         const b: Budget = { id: uid(), workspace_id: p.currentWorkspaceId, category_id: categoryId, month, amount };
-        update((prev) => ({ ...prev, budgets: [...prev.budgets, b] }), [cloudUpsert('budgets', b as unknown as Record<string, unknown>)]);
+        return update((prev) => ({ ...prev, budgets: [...prev.budgets, b] }), [cloudUpsert('budgets', b as unknown as Record<string, unknown>)]);
       }
     },
     saveGoal: (input) => {
-      const p = stateRef.current; if (!p || !p.currentWorkspaceId) return;
+      const p = stateRef.current; if (!p || !p.currentWorkspaceId) return Promise.resolve('Bạn cần tạo hoặc chọn không gian làm việc trước.');
       if (input.id) {
-        update((prev) => ({ ...prev, goals: prev.goals.map((g) => (g.id === input.id ? { ...g, ...input } : g)) }),
+        return update((prev) => ({ ...prev, goals: prev.goals.map((g) => (g.id === input.id ? { ...g, ...input } : g)) }),
           [cloudUpsert('goals', { ...input, workspace_id: p.currentWorkspaceId })]);
       } else {
         const g: Goal = { id: uid(), workspace_id: p.currentWorkspaceId, name: input.name, target: input.target, saved: input.saved, deadline: input.deadline ?? null };
-        update((prev) => ({ ...prev, goals: [...prev.goals, g] }), [cloudUpsert('goals', g as unknown as Record<string, unknown>)]);
+        return update((prev) => ({ ...prev, goals: [...prev.goals, g] }), [cloudUpsert('goals', g as unknown as Record<string, unknown>)]);
       }
     },
     contributeGoal: (id, amount) => update((prev) => ({
@@ -662,13 +698,13 @@ export function useAppData(): AppData {
     })),
     deleteGoal: (id) => update((p) => ({ ...p, goals: p.goals.filter((g) => g.id !== id) }), [cloudDelete('goals', id)]),
     saveDebt: (input) => {
-      const p = stateRef.current; if (!p || !p.currentWorkspaceId) return;
+      const p = stateRef.current; if (!p || !p.currentWorkspaceId) return Promise.resolve('Bạn cần tạo hoặc chọn không gian làm việc trước.');
       if (input.id) {
-        update((prev) => ({ ...prev, debts: prev.debts.map((d) => (d.id === input.id ? { ...d, ...input } : d)) }),
+        return update((prev) => ({ ...prev, debts: prev.debts.map((d) => (d.id === input.id ? { ...d, ...input } : d)) }),
           [cloudUpsert('debts', { ...input, workspace_id: p.currentWorkspaceId })]);
       } else {
         const d: Debt = { id: uid(), workspace_id: p.currentWorkspaceId, ...input };
-        update((prev) => ({ ...prev, debts: [...prev.debts, d] }), [cloudUpsert('debts', d as unknown as Record<string, unknown>)]);
+        return update((prev) => ({ ...prev, debts: [...prev.debts, d] }), [cloudUpsert('debts', d as unknown as Record<string, unknown>)]);
       }
     },
     payDebt: (id, amount) => update((prev) => ({
@@ -676,13 +712,13 @@ export function useAppData(): AppData {
     })),
     deleteDebt: (id) => update((p) => ({ ...p, debts: p.debts.filter((d) => d.id !== id) }), [cloudDelete('debts', id)]),
     saveReminder: (input) => {
-      const p = stateRef.current; if (!p || !p.currentWorkspaceId) return;
+      const p = stateRef.current; if (!p || !p.currentWorkspaceId) return Promise.resolve('Bạn cần tạo hoặc chọn không gian làm việc trước.');
       if (input.id) {
-        update((prev) => ({ ...prev, reminders: prev.reminders.map((r) => (r.id === input.id ? { ...r, ...input } : r)) }),
+        return update((prev) => ({ ...prev, reminders: prev.reminders.map((r) => (r.id === input.id ? { ...r, ...input } : r)) }),
           [cloudUpsert('reminders', { ...input, workspace_id: p.currentWorkspaceId })]);
       } else {
         const r: Reminder = { id: uid(), workspace_id: p.currentWorkspaceId, title: input.title, amount: input.amount ?? null, next_date: input.next_date, frequency: input.frequency };
-        update((prev) => ({ ...prev, reminders: [...prev.reminders, r] }), [cloudUpsert('reminders', r as unknown as Record<string, unknown>)]);
+        return update((prev) => ({ ...prev, reminders: [...prev.reminders, r] }), [cloudUpsert('reminders', r as unknown as Record<string, unknown>)]);
       }
     },
     completeReminder: (id, opts) => {
@@ -719,7 +755,7 @@ export function useAppData(): AppData {
     },
     deleteReminder: (id) => update((p) => ({ ...p, reminders: p.reminders.filter((r) => r.id !== id) }), [cloudDelete('reminders', id)]),
     saveProduct: (input) => {
-      const p = stateRef.current; if (!p || !p.currentWorkspaceId) return;
+      const p = stateRef.current; if (!p || !p.currentWorkspaceId) return Promise.resolve('Bạn cần tạo hoặc chọn không gian làm việc trước.');
       const wsId = p.currentWorkspaceId;
       if (input.id) {
         const variants: ProductVariant[] = input.variants.map((v) => ({
@@ -736,7 +772,7 @@ export function useAppData(): AppData {
         const removedVariantIds = (stateRef.current?.productVariants ?? [])
           .filter((v) => v.product_id === input.id && !variants.some((nv) => nv.id === v.id))
           .map((v) => v.id);
-        update((prev) => ({
+        return update((prev) => ({
           ...prev,
           products: prev.products.map((x) => (x.id === input.id ? product : x)),
           productVariants: [
@@ -760,7 +796,7 @@ export function useAppData(): AppData {
           cost_price: v.cost_price, sale_price: v.sale_price, stock: v.stock, imeis: v.imeis ?? [],
         }));
         if (variants.length > 0) product.stock = variants.reduce((s, v) => s + v.stock, 0);
-        update((prev) => ({
+        return update((prev) => ({
           ...prev, products: [...prev.products, product],
           productVariants: [...prev.productVariants, ...variants],
         }), [
@@ -784,7 +820,7 @@ export function useAppData(): AppData {
         ...movementIds.map((mid) => cloudDelete('stock_movements', mid)),
       ]);
     },
-    importStock: (input) => {
+    importStock: async (input) => {
       const p = stateRef.current; if (!p || !p.currentWorkspaceId) return 'Chưa chọn không gian.';
       const product = p.products.find((x) => x.id === input.product_id);
       const wallet = p.wallets.find((w) => w.id === input.wallet_id);
@@ -807,7 +843,7 @@ export function useAppData(): AppData {
         variant_id: input.variant_id ?? null, kind: 'in', quantity: input.quantity,
         imei: null, note: tx.note, created_at: tx.created_at ?? new Date().toISOString(),
       };
-      update((prev) => ({
+      return await update((prev) => ({
         ...prev,
         wallets: prev.wallets.map((w) => (w.id === input.wallet_id ? { ...w, balance: w.balance - totalCost } : w)),
         products: prev.products.map((x) => (x.id === input.product_id ? { ...x, stock: x.stock + input.quantity } : x)),
@@ -824,13 +860,13 @@ export function useAppData(): AppData {
       return null;
     },
     saveProductCategory: (input) => {
-      const p = stateRef.current; if (!p || !p.currentWorkspaceId) return;
+      const p = stateRef.current; if (!p || !p.currentWorkspaceId) return Promise.resolve('Bạn cần tạo hoặc chọn không gian làm việc trước.');
       if (input.id) {
-        update((prev) => ({ ...prev, productCategories: prev.productCategories.map((c) => (c.id === input.id ? { ...c, ...input } : c)) }),
+        return update((prev) => ({ ...prev, productCategories: prev.productCategories.map((c) => (c.id === input.id ? { ...c, ...input } : c)) }),
           [cloudUpsert('product_categories', { ...input, workspace_id: p.currentWorkspaceId })]);
       } else {
         const c: ProductCategory = { id: uid(), workspace_id: p.currentWorkspaceId, ...input };
-        update((prev) => ({ ...prev, productCategories: [...prev.productCategories, c] }), [cloudUpsert('product_categories', c as unknown as Record<string, unknown>)]);
+        return update((prev) => ({ ...prev, productCategories: [...prev.productCategories, c] }), [cloudUpsert('product_categories', c as unknown as Record<string, unknown>)]);
       }
     },
     deleteProductCategory: (id) => update((prev) => ({
@@ -838,26 +874,26 @@ export function useAppData(): AppData {
       products: prev.products.map((x) => (x.category_id === id ? { ...x, category_id: null } : x)),
     }), [cloudDelete('product_categories', id)]),
     saveProductField: (input) => {
-      const p = stateRef.current; if (!p || !p.currentWorkspaceId) return;
+      const p = stateRef.current; if (!p || !p.currentWorkspaceId) return Promise.resolve('Bạn cần tạo hoặc chọn không gian làm việc trước.');
       if (input.id) {
-        update((prev) => ({ ...prev, productFields: prev.productFields.map((f) => (f.id === input.id ? { ...f, ...input } : f)) }),
+        return update((prev) => ({ ...prev, productFields: prev.productFields.map((f) => (f.id === input.id ? { ...f, ...input } : f)) }),
           [cloudUpsert('product_fields', { ...input, workspace_id: p.currentWorkspaceId })]);
       } else {
         const f: ProductField = { id: uid(), workspace_id: p.currentWorkspaceId, ...input };
-        update((prev) => ({ ...prev, productFields: [...prev.productFields, f] }), [cloudUpsert('product_fields', f as unknown as Record<string, unknown>)]);
+        return update((prev) => ({ ...prev, productFields: [...prev.productFields, f] }), [cloudUpsert('product_fields', f as unknown as Record<string, unknown>)]);
       }
     },
     deleteProductField: (id) => update((prev) => ({
       ...prev, productFields: prev.productFields.filter((f) => f.id !== id),
     }), [cloudDelete('product_fields', id)]),
     saveTaxPayment: (input) => {
-      const p = stateRef.current; if (!p || !p.currentWorkspaceId) return;
+      const p = stateRef.current; if (!p || !p.currentWorkspaceId) return Promise.resolve('Bạn cần tạo hoặc chọn không gian làm việc trước.');
       if (input.id) {
-        update((prev) => ({ ...prev, taxPayments: prev.taxPayments.map((t) => (t.id === input.id ? { ...t, ...input } : t)) }),
+        return update((prev) => ({ ...prev, taxPayments: prev.taxPayments.map((t) => (t.id === input.id ? { ...t, ...input } : t)) }),
           [cloudUpsert('tax_payments', { ...input, workspace_id: p.currentWorkspaceId })]);
       } else {
         const t: TaxPayment = { id: uid(), workspace_id: p.currentWorkspaceId, ...input };
-        update((prev) => ({ ...prev, taxPayments: [...prev.taxPayments, t] }), [cloudUpsert('tax_payments', t as unknown as Record<string, unknown>)]);
+        return update((prev) => ({ ...prev, taxPayments: [...prev.taxPayments, t] }), [cloudUpsert('tax_payments', t as unknown as Record<string, unknown>)]);
       }
     },
     toggleTaxPaid: (id) => update((prev) => ({
@@ -936,6 +972,17 @@ export function useAppData(): AppData {
     clearSampleData,
   };
   return api;
+}
+
+export function AppDataProvider({ children }: { children: React.ReactNode }) {
+  const data = useAppDataState();
+  return createElement(AppDataContext.Provider, { value: data }, children);
+}
+
+export function useAppData(): AppData {
+  const data = useContext(AppDataContext);
+  if (!data) throw new Error('useAppData must be used inside AppDataProvider.');
+  return data;
 }
 
 // ---------------------------------------------------------------------------

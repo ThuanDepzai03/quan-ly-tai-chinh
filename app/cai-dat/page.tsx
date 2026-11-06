@@ -250,10 +250,11 @@ export default function CaiDat() {
       ) : null}
 
       <GlassCard title="Thành viên & phân quyền">
-        <form className="form-grid" onSubmit={(e) => {
+        <form className="form-grid" onSubmit={async (e) => {
           e.preventDefault();
           if (!memberEmail.trim()) { setMsg('Nhập email thành viên.'); return; }
-          data.saveMember({ email: memberEmail.trim(), name: memberName.trim(), role: memberRole });
+          const error = await data.saveMember({ email: memberEmail.trim(), name: memberName.trim(), role: memberRole });
+          if (error) { setMsg(error); return; }
           setMsg('Đã thêm thành viên. Lưu ý: ở bản cloud, thành viên chỉ xem được dữ liệu sau khi người đó đăng ký tài khoản Supabase và được gán quyền — email ở đây dùng để nhận diện trong danh sách.');
           setMemberEmail(''); setMemberName('');
         }}>
@@ -290,10 +291,12 @@ export default function CaiDat() {
       </GlassCard>
 
       <GlassCard title="Danh mục thu / chi">
-        <form className="form-grid" onSubmit={(e) => {
+        <form className="form-grid" onSubmit={async (e) => {
           e.preventDefault();
           if (!catName.trim()) return;
-          data.saveCategory({ name: catName.trim(), kind: catKind, color: '#0a84ff', icon: catKind === 'income' ? '💰' : '💸' });
+          const error = await data.saveCategory({ name: catName.trim(), kind: catKind, color: '#0a84ff', icon: catKind === 'income' ? '💰' : '💸' });
+          if (error) { setMsg(error); return; }
+          setMsg('Đã thêm danh mục.');
           setCatName('');
         }}>
           <div className="form-row">
@@ -320,10 +323,11 @@ export default function CaiDat() {
       </GlassCard>
 
       <GlassCard title={`Ngân sách tháng ${month}`}>
-        <form className="form-grid" onSubmit={(e) => {
+        <form className="form-grid" onSubmit={async (e) => {
           e.preventDefault();
           if (!budgetCat || !budgetAmount) { setMsg('Chọn danh mục và nhập số tiền ngân sách.'); return; }
-          data.saveBudget(budgetCat, month, Number(budgetAmount) || 0);
+          const error = await data.saveBudget(budgetCat, month, Number(budgetAmount) || 0);
+          if (error) { setMsg(error); return; }
           setMsg(`Đã đặt ngân sách ${fmtVND(Number(budgetAmount) || 0)} cho tháng ${month}.`);
           setBudgetAmount('');
         }}>

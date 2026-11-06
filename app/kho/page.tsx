@@ -192,6 +192,7 @@ function SellModal({ product, onClose }: { product: Product; onClose: () => void
   const [walletId, setWalletId] = useState(wallets[0]?.id ?? '');
   const [note, setNote] = useState('');
   const [err, setErr] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const variant = variants.find((v) => v.id === variantId);
   const sale = variant?.sale_price ?? product.sale_price;
@@ -200,16 +201,22 @@ function SellModal({ product, onClose }: { product: Product; onClose: () => void
   const revenue = qty * sale;
   const profit = profitOf(qty, sale, cost);
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
     const categoryId = state?.categories.find((c) => c.workspace_id === state.currentWorkspaceId && c.kind === 'income')?.id ?? null;
-    const error = data.addTransaction({
-      type: 'income', amount: revenue, wallet_id: walletId, category_id: categoryId,
-      product_id: product.id, variant_id: variantId || null, imei: imei || null,
-      quantity: qty, unit_price: sale, cost_price: cost, note: note || `Bán ${product.name}`, date: todayISO(),
-    });
-    if (error) { setErr(error); return; }
-    onClose();
+    setSaving(true);
+    setErr('');
+    try {
+      const error = await data.addTransaction({
+        type: 'income', amount: revenue, wallet_id: walletId, category_id: categoryId,
+        product_id: product.id, variant_id: variantId || null, imei: imei || null,
+        quantity: qty, unit_price: sale, cost_price: cost, note: note || `Bán ${product.name}`, date: todayISO(),
+      });
+      if (error) { setErr(error); return; }
+      onClose();
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -250,7 +257,7 @@ function SellModal({ product, onClose }: { product: Product; onClose: () => void
           Lãi: <b style={{ color: '#34c759' }}>{fmtVND(profit)}</b>
         </div>
         {err ? <p className="error">{err}</p> : null}
-        <button type="submit">Xác nhận bán</button>
+        <button type="submit" disabled={saving}>{saving ? 'Đang lưu…' : 'Xác nhận bán'}</button>
       </form>
     </Modal>
   );
@@ -267,17 +274,24 @@ function ImportModal({ product, onClose }: { product: Product; onClose: () => vo
   const [walletId, setWalletId] = useState(wallets[0]?.id ?? '');
   const [imeis, setImeis] = useState('');
   const [err, setErr] = useState('');
+  const [saving, setSaving] = useState(false);
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
-    const error = data.importStock({
-      product_id: product.id, variant_id: variantId || null, quantity: qty,
-      cost_price: Number(cost) || 0, wallet_id: walletId,
-      imeis: imeis.split(',').map((s) => s.trim()).filter(Boolean),
-      note: `Nhập kho ${product.name} x${qty}`,
-    });
-    if (error) { setErr(error); return; }
-    onClose();
+    setSaving(true);
+    setErr('');
+    try {
+      const error = await data.importStock({
+        product_id: product.id, variant_id: variantId || null, quantity: qty,
+        cost_price: Number(cost) || 0, wallet_id: walletId,
+        imeis: imeis.split(',').map((s) => s.trim()).filter(Boolean),
+        note: `Nhập kho ${product.name} x${qty}`,
+      });
+      if (error) { setErr(error); return; }
+      onClose();
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -307,7 +321,7 @@ function ImportModal({ product, onClose }: { product: Product; onClose: () => vo
         </Field>
         <p className="muted">Tổng chi: <b style={{ color: 'var(--text)' }}>{fmtVND(qty * (Number(cost) || 0))}</b> — sẽ ghi 1 giao dịch Chi “Nhập hàng” và tăng tồn kho.</p>
         {err ? <p className="error">{err}</p> : null}
-        <button type="submit">Xác nhận nhập kho</button>
+        <button type="submit" disabled={saving}>{saving ? 'Đang lưu…' : 'Xác nhận nhập kho'}</button>
       </form>
     </Modal>
   );
@@ -318,10 +332,24 @@ function CategoryManager({ onClose }: { onClose: () => void }) {
   const { state } = data;
   const [name, setName] = useState('');
   const [color, setColor] = useState('#0a84ff');
+  const [err, setErr] = useState('');
+  const [saving, setSaving] = useState(false);
   const cats = (state?.productCategories ?? []).filter((c) => c.workspace_id === state?.currentWorkspaceId);
   return (
     <Modal title="Danh mục loại hàng" onClose={onClose}>
-      <form onSubmit={(e) => { e.preventDefault(); if (!name.trim()) return; data.saveProductCategory({ name: name.trim(), color, icon: '📦' }); setName(''); }} className="form-grid">
+      <form onSubmit={async (e) => {
+        e.preventDefault();
+        if (!name.trim()) return;
+        setSaving(true);
+        setErr('');
+        try {
+          const error = await data.saveProductCategory({ name: name.trim(), color, icon: '📦' });
+          if (error) { setErr(error); return; }
+          setName('');
+        } finally {
+          setSaving(false);
+        }
+      }} className="form-grid">
         <div className="form-row">
           <Field label="Tên danh mục mới">
             <input placeholder="VD: Ốp lưng" value={name} onChange={(e) => setName(e.target.value)} />
@@ -330,7 +358,8 @@ function CategoryManager({ onClose }: { onClose: () => void }) {
             <input type="color" value={color} onChange={(e) => setColor(e.target.value)} />
           </Field>
         </div>
-        <button type="submit">Thêm danh mục</button>
+        {err ? <p className="error">{err}</p> : null}
+        <button type="submit" disabled={saving}>{saving ? 'Đang lưu…' : 'Thêm danh mục'}</button>
       </form>
       <div className="row-list" style={{ marginTop: 12 }}>
         {cats.map((c) => (
@@ -351,17 +380,26 @@ function FieldManager({ onClose }: { onClose: () => void }) {
   const [type, setType] = useState<ProductField['field_type']>('text');
   const [required, setRequired] = useState(false);
   const [options, setOptions] = useState('');
+  const [err, setErr] = useState('');
+  const [saving, setSaving] = useState(false);
   const fields = (state?.productFields ?? []).filter((f) => f.workspace_id === state?.currentWorkspaceId);
   return (
     <Modal title="Trường thuộc tính tùy chỉnh" onClose={onClose}>
-      <form onSubmit={(e) => {
+      <form onSubmit={async (e) => {
         e.preventDefault();
         if (!name.trim()) return;
-        data.saveProductField({
-          name: name.trim(), field_type: type, required, enabled: true,
-          options: type === 'select' ? options.split(',').map((s) => s.trim()).filter(Boolean) : null,
-        });
-        setName(''); setOptions('');
+        setSaving(true);
+        setErr('');
+        try {
+          const error = await data.saveProductField({
+            name: name.trim(), field_type: type, required, enabled: true,
+            options: type === 'select' ? options.split(',').map((s) => s.trim()).filter(Boolean) : null,
+          });
+          if (error) { setErr(error); return; }
+          setName(''); setOptions('');
+        } finally {
+          setSaving(false);
+        }
       }} className="form-grid">
         <Field label="Tên trường mới">
           <input placeholder="VD: Màu sắc, IMEI, Nhà cung cấp, Bảo hành" value={name} onChange={(e) => setName(e.target.value)} />
@@ -382,7 +420,8 @@ function FieldManager({ onClose }: { onClose: () => void }) {
           <input type="checkbox" checked={required} onChange={(e) => setRequired(e.target.checked)} />
           Bắt buộc nhập khi thêm sản phẩm
         </label>
-        <button type="submit">Thêm trường</button>
+        {err ? <p className="error">{err}</p> : null}
+        <button type="submit" disabled={saving}>{saving ? 'Đang lưu…' : 'Thêm trường'}</button>
       </form>
       <div className="row-list" style={{ marginTop: 12 }}>
         {fields.map((f) => (

@@ -1,5 +1,6 @@
 import './globals.css';
 import type { Metadata, Viewport } from 'next';
+import { AppDataProvider } from '@/lib/data';
 
 export const metadata: Metadata = {
   title: 'Quản lý tài chính',
@@ -11,7 +12,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="vi">
       <body>
-        <div style={{ maxWidth: 1080, margin: '0 auto', padding: '20px 16px 64px' }}>{children}</div>
+        <AppDataProvider>
+          <div style={{ maxWidth: 1080, margin: '0 auto', padding: '20px 16px 64px' }}>{children}</div>
+        </AppDataProvider>
       </body>
     </html>
   );

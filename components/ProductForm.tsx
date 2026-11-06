@@ -35,34 +35,45 @@ export default function ProductForm({ state, editing, onDone }: {
     })),
   );
   const [err, setErr] = useState('');
+  const [saving, setSaving] = useState(false);
+  const variantStock = variants.reduce((total, variant) => total + (Number(variant.stock) || 0), 0);
 
   function setVariant(i: number, patch: Partial<VariantRow>) {
     setVariants((prev) => prev.map((v, idx) => (idx === i ? { ...v, ...patch } : v)));
   }
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) { setErr('Vui lòng nhập tên sản phẩm.'); return; }
     for (const f of enabledFields) {
       if (f.required && !(custom[f.name] ?? '').trim()) { setErr(`Trường "${f.name}" là bắt buộc.`); return; }
     }
-    saveProduct({
-      id: editing?.product.id,
-      name: name.trim(), sku: sku.trim(), unit: unit.trim() || 'cái',
-      category_id: categoryId || null,
-      cost_price: Number(cost) || 0, sale_price: Number(sale) || 0,
-      stock: Number(stock) || 0, min_stock: Number(minStock) || 0,
-      custom_values: custom, image,
-      variants: variants
-        .filter((v) => v.name.trim())
-        .map((v) => ({
-          id: v.id, name: v.name.trim(),
-          cost_price: Number(v.cost_price) || 0, sale_price: Number(v.sale_price) || 0,
-          stock: Number(v.stock) || 0,
-          imeis: v.imeis.split(',').map((s) => s.trim()).filter(Boolean),
-        })),
-    });
-    onDone();
+    setSaving(true);
+    setErr('');
+    try {
+      const error = await saveProduct({
+        id: editing?.product.id,
+        name: name.trim(), sku: sku.trim(), unit: unit.trim() || 'cái',
+        category_id: categoryId || null,
+        cost_price: Number(cost) || 0, sale_price: Number(sale) || 0,
+        stock: Number(stock) || 0, min_stock: Number(minStock) || 0,
+        custom_values: custom, image,
+        variants: variants
+          .filter((v) => v.name.trim())
+          .map((v) => ({
+            id: v.id, name: v.name.trim(),
+            cost_price: Number(v.cost_price) || 0, sale_price: Number(v.sale_price) || 0,
+            stock: Number(v.stock) || 0,
+            imeis: v.imeis.split(',').map((s) => s.trim()).filter(Boolean),
+          })),
+      });
+      if (error) { setErr(error); return; }
+      onDone();
+    } catch (error) {
+      setErr(`Không lưu được sản phẩm: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -93,8 +104,9 @@ export default function ProductForm({ state, editing, onDone }: {
         </Field>
       </div>
       <div className="form-row">
-        <Field label="Tồn kho">
-          <input type="number" min={0} value={stock} onChange={(e) => setStock(e.target.value)} />
+        <Field label={variants.length ? `Tổng tồn kho (${variantStock})` : 'Tồn kho'}>
+          <input type="number" min={0} value={variants.length ? String(variantStock) : stock}
+            disabled={variants.length > 0} onChange={(e) => setStock(e.target.value)} />
         </Field>
         <Field label="Tồn tối thiểu (cảnh báo)">
           <input type="number" min={0} value={minStock} onChange={(e) => setMinStock(e.target.value)} />
@@ -146,13 +158,28 @@ export default function ProductForm({ state, editing, onDone }: {
       <fieldset className="fieldset">
         <legend>Biến thể (màu / size / dung lượng) — mỗi biến thể có giá &amp; tồn riêng</legend>
         {variants.map((v, i) => (
-          <div key={i} className="variant-row">
-            <input placeholder="Tên biến thể (VD: Đen)" value={v.name} onChange={(e) => setVariant(i, { name: e.target.value })} />
-            <input type="number" min={0} placeholder="Giá nhập" value={v.cost_price} onChange={(e) => setVariant(i, { cost_price: e.target.value })} />
-            <input type="number" min={0} placeholder="Giá bán" value={v.sale_price} onChange={(e) => setVariant(i, { sale_price: e.target.value })} />
-            <input type="number" min={0} placeholder="Tồn" value={v.stock} onChange={(e) => setVariant(i, { stock: e.target.value })} />
-            <input placeholder="IMEI, cách nhau bằng dấu phẩy" value={v.imeis} onChange={(e) => setVariant(i, { imeis: e.target.value })} />
-            <button type="button" className="btn-ghost" onClick={() => setVariants((prev) => prev.filter((_, idx) => idx !== i))}>Xóa</button>
+          <div key={v.id ?? i} className="variant-card">
+            <div className="variant-card-header">
+              <strong>Biến thể {i + 1}</strong>
+              <button type="button" className="btn-ghost btn-small" onClick={() => setVariants((prev) => prev.filter((_, idx) => idx !== i))}>Xóa</button>
+            </div>
+            <div className="variant-fields">
+              <Field label="Tên / thuộc tính">
+                <input placeholder="VD: Đen / 128 GB / Size M" value={v.name} onChange={(e) => setVariant(i, { name: e.target.value })} />
+              </Field>
+              <Field label="Giá nhập (đ)">
+                <input type="number" min={0} value={v.cost_price} onChange={(e) => setVariant(i, { cost_price: e.target.value })} />
+              </Field>
+              <Field label="Giá bán (đ)">
+                <input type="number" min={0} value={v.sale_price} onChange={(e) => setVariant(i, { sale_price: e.target.value })} />
+              </Field>
+              <Field label="Tồn kho">
+                <input type="number" min={0} value={v.stock} onChange={(e) => setVariant(i, { stock: e.target.value })} />
+              </Field>
+              <Field label="IMEI / Serial (phân cách bằng dấu phẩy)">
+                <input placeholder="VD: 356789123456703, 356789123456704" value={v.imeis} onChange={(e) => setVariant(i, { imeis: e.target.value })} />
+              </Field>
+            </div>
           </div>
         ))}
         <button type="button" className="btn-secondary" onClick={() => setVariants((prev) => [...prev, { name: '', cost_price: cost, sale_price: sale, stock: '0', imeis: '' }])}>
@@ -160,7 +187,7 @@ export default function ProductForm({ state, editing, onDone }: {
         </button>
       </fieldset>
       {err ? <p className="error">{err}</p> : null}
-      <button type="submit">{editing ? 'Lưu thay đổi' : 'Thêm sản phẩm'}</button>
+      <button type="submit" disabled={saving}>{saving ? 'Đang lưu…' : editing ? 'Lưu thay đổi' : 'Thêm sản phẩm'}</button>
     </form>
   );
 }

@@ -17,6 +17,12 @@ h1 { font-size: 26px; margin: 0 0 8px; }
 h2 { font-size: 19px; }
 .muted { color: var(--muted); }
 .error { color: var(--red); font-weight: 600; margin: 4px 0; }
+.sync-error {
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
+  margin: 12px 0; padding: 12px 14px; border: 1px solid rgba(255, 59, 48, 0.45);
+  border-radius: 14px; background: rgba(255, 59, 48, 0.12); color: #ffd5d2;
+}
+.sync-error button { flex: 0 0 auto; }
 .glass {
   background: var(--card); backdrop-filter: blur(20px) saturate(1.4); -webkit-backdrop-filter: blur(20px) saturate(1.4);
   border: 1px solid rgba(255, 255, 255, 0.14); border-radius: var(--radius); padding: 20px;
@@ -54,8 +60,14 @@ select option { color: #101828; background: #fff; }
   background: rgba(52, 199, 89, 0.12); border: 1px solid rgba(52, 199, 89, 0.35);
   border-radius: 14px; padding: 12px; line-height: 1.7;
 }
-.variant-row { display: grid; grid-template-columns: 1.2fr 0.8fr 0.8fr 0.6fr 1.4fr auto; gap: 8px; align-items: center; }
-@media (max-width: 700px) { .variant-row { grid-template-columns: 1fr 1fr; } }
+.variant-card {
+  display: grid; gap: 10px; padding: 12px; border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12); background: rgba(255, 255, 255, 0.04);
+}
+.variant-card-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.variant-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.variant-fields > :first-child, .variant-fields > :last-child { grid-column: 1 / -1; }
+@media (max-width: 560px) { .variant-fields { grid-template-columns: 1fr; } }
 .app-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
 /* ---- Tab bar nổi ở dưới kiểu iOS 27 Liquid Glass — giống bản demo ---- */
 .app-shell { padding-bottom: 8px; }

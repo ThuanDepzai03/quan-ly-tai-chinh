@@ -29,6 +29,7 @@ export default function TransactionForm({ state, onDone, initialType = 'income' 
   const [qty, setQty] = useState(1);
   const [imei, setImei] = useState('');
   const [err, setErr] = useState('');
+  const [saving, setSaving] = useState(false);
   const [taxType, setTaxType] = useState('');
   const [taxRate, setTaxRate] = useState('');
   const [receiptImage, setReceiptImage] = useState<string | null>(null);
@@ -44,30 +45,38 @@ export default function TransactionForm({ state, onDone, initialType = 'income' 
   const availableImeis = useMemo(() => variant?.imeis ?? [], [variant]);
   const cats = categories.filter((c) => c.kind === (type === 'income' ? 'income' : 'expense'));
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!walletId) { setErr('Vui lòng chọn ví.'); return; }
     if (type === 'transfer' && (!toWalletId || toWalletId === walletId)) {
       setErr('Chuyển ví cần chọn ví đích khác ví nguồn.'); return;
     }
     if (isSale && !productId) { setErr('Vui lòng chọn sản phẩm để bán.'); return; }
-    const error = addTransaction({
-      type, amount: computedAmount, wallet_id: walletId,
-      to_wallet_id: type === 'transfer' ? toWalletId : null,
-      category_id: categoryId || null,
-      product_id: isSale ? productId : null,
-      variant_id: isSale && variantId ? variantId : null,
-      imei: isSale && imei ? imei : null,
-      quantity: isSale ? qty : 1,
-      unit_price: isSale ? salePrice : null,
-      cost_price: isSale ? costPrice : null,
-      tax_type: type === 'transfer' ? null : (taxType || null),
-      tax_rate: type === 'transfer' ? null : (taxRate ? Number(taxRate) : null),
-      receipt_image: receiptImage,
-      note, date,
-    });
-    if (error) { setErr(error); return; }
-    onDone();
+    setSaving(true);
+    setErr('');
+    try {
+      const error = await addTransaction({
+        type, amount: computedAmount, wallet_id: walletId,
+        to_wallet_id: type === 'transfer' ? toWalletId : null,
+        category_id: categoryId || null,
+        product_id: isSale ? productId : null,
+        variant_id: isSale && variantId ? variantId : null,
+        imei: isSale && imei ? imei : null,
+        quantity: isSale ? qty : 1,
+        unit_price: isSale ? salePrice : null,
+        cost_price: isSale ? costPrice : null,
+        tax_type: type === 'transfer' ? null : (taxType || null),
+        tax_rate: type === 'transfer' ? null : (taxRate ? Number(taxRate) : null),
+        receipt_image: receiptImage,
+        note, date,
+      });
+      if (error) { setErr(error); return; }
+      onDone();
+    } catch (error) {
+      setErr(`Không lưu được giao dịch: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -224,7 +233,7 @@ export default function TransactionForm({ state, onDone, initialType = 'income' 
         {receiptImage ? <img src={receiptImage} alt="Hóa đơn đính kèm" decoding="async" style={{ maxWidth: '100%', maxHeight: 180, objectFit: 'contain', borderRadius: 12, marginTop: 8 }} /> : null}
       </fieldset>
       {err ? <p className="error">{err}</p> : null}
-      <button type="submit">Lưu giao dịch</button>
+      <button type="submit" disabled={saving}>{saving ? 'Đang lưu…' : 'Lưu giao dịch'}</button>
     </form>
   );
 }

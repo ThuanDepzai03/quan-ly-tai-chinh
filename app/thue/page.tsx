@@ -207,13 +207,21 @@ function TaxFormModal({ onClose }: { onClose: () => void }) {
   const [dueDate, setDueDate] = useState('');
   const [note, setNote] = useState('');
   const [err, setErr] = useState('');
+  const [saving, setSaving] = useState(false);
   return (
     <Modal title="Ghi khoản thuế" onClose={onClose}>
-      <form onSubmit={(e) => {
+      <form onSubmit={async (e) => {
         e.preventDefault();
         if (!amount || Number(amount) <= 0) { setErr('Số tiền phải lớn hơn 0.'); return; }
-        data.saveTaxPayment({ tax_type: taxType, period, amount: Number(amount), paid: false, due_date: dueDate || null, note: note || null });
-        onClose();
+        setSaving(true);
+        setErr('');
+        try {
+          const error = await data.saveTaxPayment({ tax_type: taxType, period, amount: Number(amount), paid: false, due_date: dueDate || null, note: note || null });
+          if (error) { setErr(error); return; }
+          onClose();
+        } finally {
+          setSaving(false);
+        }
       }} className="form-grid">
         <Field label="Loại thuế">
           <select value={taxType} onChange={(e) => setTaxType(e.target.value as TaxKind)}>
@@ -234,7 +242,7 @@ function TaxFormModal({ onClose }: { onClose: () => void }) {
           <input value={note} onChange={(e) => setNote(e.target.value)} />
         </Field>
         {err ? <p className="error">{err}</p> : null}
-        <button type="submit">Lưu khoản thuế</button>
+        <button type="submit" disabled={saving}>{saving ? 'Đang lưu…' : 'Lưu khoản thuế'}</button>
       </form>
     </Modal>
   );
