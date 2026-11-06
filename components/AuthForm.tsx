@@ -174,54 +174,6 @@ export default function AuthForm({ showHomeLink = false }: { showHomeLink?: bool
     } finally { setBusy(false); }
   }
 
-  async function demoLogin() {
-    setBusy(true);
-    try {
-      if (cloud) {
-        const sb = createClient();
-        if (sb) {
-          const { data, error } = await sb.auth.signInWithPassword({ email: DEMO_EMAIL, password: DEMO_PASSWORD });
-          if (!error) {
-            // Demo login Supabase thành công: cũng phải lưu key session như
-            // đăng nhập thường, nếu không dashboard vẫn báo chưa đăng nhập.
-            if (await persistCloudSession(sb, data.user)) { goDashboard(); return; }
-            setError('Đăng nhập demo thành công nhưng chưa lấy được phiên đăng nhập. Hãy thử lại.');
-            return;
-          }
-          // Tài khoản demo chưa có trên Supabase: tự tạo (seedDemoAccount)
-          // rồi đăng nhập lại — chạy lại không tạo trùng (signUp báo
-          // already-registered thì quay lại đăng nhập).
-          const { error: signUpErr } = await sb.auth.signUp({
-            email: DEMO_EMAIL, password: DEMO_PASSWORD,
-            options: { data: { full_name: 'Người dùng Demo' } },
-          });
-          if (signUpErr && !/already registered|already exists/i.test(signUpErr.message)) {
-            setError('Tài khoản demo chưa có trên Supabase và không tạo được — hãy đăng ký tài khoản thật.');
-            return;
-          }
-          const retry = await sb.auth.signInWithPassword({ email: DEMO_EMAIL, password: DEMO_PASSWORD });
-          if (retry.error || !(await persistCloudSession(sb, retry.data.user))) {
-            setError('Không vào được tài khoản demo trên Supabase. Hãy đăng ký tài khoản thật.');
-            return;
-          }
-          const appUser = getSessionUser();
-          if (appUser) {
-            // Chỉ nạp mẫu khi tài khoản demo chưa có workspace nào (chạy lại
-            // không tạo trùng workspace mẫu mới).
-            const { data: existing } = await sb.from('workspaces').select('id').eq('owner_id', appUser.id).limit(1);
-            if (!existing || existing.length === 0) await seedCloudDemoData(sb, appUser);
-          }
-          goDashboard();
-          return;
-        }
-      }
-      const { user, error } = await localSignIn(DEMO_EMAIL, DEMO_PASSWORD);
-      if (error || !user) { setError(error ?? 'Không vào được tài khoản demo.'); return; }
-      ensureLocalState(user, true);
-      goDashboard();
-    } finally { setBusy(false); }
-  }
-
   const titles: Record<Mode, string> = {
     login: 'Đăng nhập', register: 'Đăng ký tài khoản', forgot: 'Quên mật khẩu',
   };
@@ -229,13 +181,13 @@ export default function AuthForm({ showHomeLink = false }: { showHomeLink?: bool
   return (
     <div>
       <h1>{titles[mode]}</h1>
-      <p className="muted">
+      {/* <p className="muted">
         {cloud
           ? 'Đang dùng Supabase Auth thật (Email).'
           : 'Chưa cấu hình Supabase — đang dùng đăng nhập local (demo). Điền .env.local để dùng Supabase Auth thật.'}
-      </p>
+      </p> */}
 
-      {cloud ? (
+      {/* {cloud ? (
         <div
           style={{
             background: 'rgba(255, 193, 7, 0.12)', border: '1px solid rgba(255, 193, 7, 0.4)',
@@ -248,7 +200,7 @@ export default function AuthForm({ showHomeLink = false }: { showHomeLink?: bool
           Lúc test, nên <strong>tắt Confirm email</strong> (Authentication &gt; Providers &gt; Email) để đăng ký xong đăng nhập ngay.
           Nếu đăng nhập báo sai mật khẩu dù bạn gõ đúng, rất có thể tài khoản <strong>chưa xác thực email</strong> — bấm nút “Gửi lại mail xác thực” bên dưới, hoặc vào Supabase &gt; Authentication &gt; Users &gt; chọn user &gt; Confirm user thủ công.
         </div>
-      ) : null}
+      ) : null} */}
 
       <form onSubmit={submit} className="form-grid">
         {mode === 'register' ? (
@@ -298,17 +250,20 @@ export default function AuthForm({ showHomeLink = false }: { showHomeLink?: bool
           {busy ? 'Đang xử lý…' : titles[mode]}
         </button>
       </form>
-      <div className="flex-row" style={{ marginTop: 12 }}>
-        <button type="button" className="btn-secondary" onClick={demoLogin} disabled={busy}>
-          Vào ngay bằng tài khoản demo
+      {mode === 'login' ? (
+        <button
+          type="button"
+          className="btn-secondary"
+          style={{ width: '100%', marginTop: 12 }}
+          onClick={() => { setMode('register'); setMsg(''); setShowResend(false); setResendMsg(''); }}
+          disabled={busy}
+        >
+          Chưa có tài khoản? Đăng ký ngay
         </button>
-      </div>
+      ) : null}
       <p style={{ marginTop: 16, lineHeight: 1.9 }}>
         {mode !== 'login' ? (
           <Link href="#" onClick={(e) => { e.preventDefault(); setMode('login'); setMsg(''); setShowResend(false); }}>Đã có tài khoản? Đăng nhập</Link>
-        ) : null}
-        {mode !== 'register' ? (
-          <><br /><Link href="#" onClick={(e) => { e.preventDefault(); setMode('register'); setMsg(''); setShowResend(false); }}>Chưa có tài khoản? Đăng ký</Link></>
         ) : null}
         {mode !== 'forgot' ? (
           <><br /><Link href="#" onClick={(e) => { e.preventDefault(); setMode('forgot'); setMsg(''); setShowResend(false); }}>Quên mật khẩu?</Link></>
