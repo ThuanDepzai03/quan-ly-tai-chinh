@@ -177,10 +177,10 @@ export interface AppData {
   saveBudget: (categoryId: string, month: string, amount: number) => Promise<string | null>;
   deleteBudget: (id: string) => void;
   saveGoal: (input: { id?: string; name: string; target: number; saved: number; deadline?: string | null }) => Promise<string | null>;
-  contributeGoal: (id: string, amount: number) => void;
+  contributeGoal: (id: string, amount: number) => Promise<string | null>;
   deleteGoal: (id: string) => void;
   saveDebt: (input: { id?: string; name: string; kind: Debt['kind']; amount: number; paid: number; due_date?: string | null }) => Promise<string | null>;
-  payDebt: (id: string, amount: number) => void;
+  payDebt: (id: string, amount: number) => Promise<string | null>;
   deleteDebt: (id: string) => void;
   saveReminder: (input: { id?: string; title: string; amount?: number | null; next_date: string; frequency: Reminder['frequency'] }) => Promise<string | null>;
   /** Đánh dấu nhắc đã xử lý: dời sang kỳ tiếp; nếu opts.createExpense thì
@@ -750,9 +750,15 @@ function useAppDataState(): AppData {
         return update((prev) => ({ ...prev, goals: [...prev.goals, g] }), [cloudUpsert('goals', g as unknown as Record<string, unknown>)]);
       }
     },
-    contributeGoal: (id, amount) => update((prev) => ({
-      ...prev, goals: prev.goals.map((g) => (g.id === id ? { ...g, saved: Math.max(0, g.saved + amount) } : g)),
-    })),
+    contributeGoal: (id, amount) => {
+      const goal = stateRef.current?.goals.find((g) => g.id === id);
+      if (!goal) return Promise.resolve('Không tìm thấy mục tiêu tiết kiệm.');
+      if (amount <= 0) return Promise.resolve('Số tiền góp phải lớn hơn 0.');
+      const saved = goal.saved + amount;
+      return update((prev) => ({
+        ...prev, goals: prev.goals.map((g) => (g.id === id ? { ...g, saved } : g)),
+      }), [cloudUpsert('goals', { ...goal, saved })]);
+    },
     deleteGoal: (id) => update((p) => ({ ...p, goals: p.goals.filter((g) => g.id !== id) }), [cloudDelete('goals', id)]),
     saveDebt: (input) => {
       const p = stateRef.current; if (!p || !p.currentWorkspaceId) return Promise.resolve('Bạn cần tạo hoặc chọn không gian làm việc trước.');
@@ -764,9 +770,15 @@ function useAppDataState(): AppData {
         return update((prev) => ({ ...prev, debts: [...prev.debts, d] }), [cloudUpsert('debts', d as unknown as Record<string, unknown>)]);
       }
     },
-    payDebt: (id, amount) => update((prev) => ({
-      ...prev, debts: prev.debts.map((d) => (d.id === id ? { ...d, paid: Math.min(d.amount, d.paid + amount) } : d)),
-    })),
+    payDebt: (id, amount) => {
+      const debt = stateRef.current?.debts.find((d) => d.id === id);
+      if (!debt) return Promise.resolve('Không tìm thấy khoản nợ.');
+      if (amount <= 0) return Promise.resolve('Số tiền ghi nhận phải lớn hơn 0.');
+      const paid = Math.min(debt.amount, debt.paid + amount);
+      return update((prev) => ({
+        ...prev, debts: prev.debts.map((d) => (d.id === id ? { ...d, paid } : d)),
+      }), [cloudUpsert('debts', { ...debt, paid })]);
+    },
     deleteDebt: (id) => update((p) => ({ ...p, debts: p.debts.filter((d) => d.id !== id) }), [cloudDelete('debts', id)]),
     saveReminder: (input) => {
       const p = stateRef.current; if (!p || !p.currentWorkspaceId) return Promise.resolve('Bạn cần tạo hoặc chọn không gian làm việc trước.');
