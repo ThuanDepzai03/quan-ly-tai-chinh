@@ -12,6 +12,25 @@ body {
   background-attachment: fixed;
   color: var(--text); min-height: 100vh;
 }
+.site-footer {
+  display: flex; justify-content: center; padding: 8px 16px 22px;
+}
+.author-link {
+  position: relative; display: inline-flex; align-items: center; gap: 5px;
+  overflow: hidden; padding: 6px 12px; border: 1px solid transparent;
+  border-radius: 999px; color: var(--muted); font-size: 11px; text-decoration: none;
+  transition: color .2s ease, border-color .2s ease, background .2s ease, box-shadow .2s ease, transform .2s ease;
+}
+.author-link strong { color: #d7ddff; font-weight: 650; }
+.author-sparkle { color: #b7a5ff; font-size: 12px; transition: transform .3s ease, text-shadow .3s ease; }
+.author-link:hover, .author-link:focus-visible {
+  border-color: rgba(179, 157, 255, .36); outline: none;
+  background: linear-gradient(110deg, rgba(10, 132, 255, .13), rgba(168, 85, 247, .16));
+  color: #fff; box-shadow: 0 0 18px rgba(139, 92, 246, .22); transform: translateY(-1px);
+}
+.author-link:hover .author-sparkle, .author-link:focus-visible .author-sparkle {
+  transform: rotate(45deg) scale(1.35); text-shadow: 0 0 8px #d8c8ff;
+}
 a { color: var(--accent); }
 h1 { font-size: 26px; margin: 0 0 8px; }
 h2 { font-size: 19px; }
