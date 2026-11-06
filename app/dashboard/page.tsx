@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import AppShell from '@/components/AppShell';
@@ -507,6 +507,9 @@ function DebtImageSlot({ debt }: { debt: Debt }) {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [viewing, setViewing] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const dragStart = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
 
   async function saveImage(image: string | null) {
     setSaving(true);
@@ -534,6 +537,29 @@ function DebtImageSlot({ debt }: { debt: Debt }) {
       setError(reason instanceof Error ? reason.message : String(reason));
     }
   }
+
+  function closeViewer() {
+    setViewing(false);
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  }
+
+  function changeZoom(nextZoom: number) {
+    setZoom(Math.min(5, Math.max(1, nextZoom)));
+    if (nextZoom <= 1) setPan({ x: 0, y: 0 });
+  }
+
+  useEffect(() => {
+    if (!viewing) return;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') closeViewer();
+      if (event.key === '+' || event.key === '=') changeZoom(zoom + 0.25);
+      if (event.key === '-') changeZoom(zoom - 0.25);
+      if (event.key === '0') changeZoom(1);
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [viewing, zoom]);
 
   return (
     <div className="debt-image-column">
@@ -566,9 +592,44 @@ function DebtImageSlot({ debt }: { debt: Debt }) {
       ) : null}
       {error ? <span className="debt-image-error" role="alert">{error}</span> : null}
       {viewing && debt.image ? (
-        <Modal title={`Ảnh: ${debt.name}`} onClose={() => setViewing(false)} className="debt-image-viewer">
-          <img src={debt.image} alt={`Ảnh đính kèm cho ${debt.name}`} />
-        </Modal>
+        <div className="debt-image-viewer" role="dialog" aria-modal="true" aria-label={`Xem ảnh: ${debt.name}`}
+          onClick={closeViewer}>
+          <div className="debt-image-viewer-toolbar" onClick={(event) => event.stopPropagation()}>
+            <span>{debt.name}</span>
+            <div className="debt-image-zoom-controls" aria-label="Điều khiển thu phóng">
+              <button onClick={() => changeZoom(zoom - 0.25)} disabled={zoom <= 1} aria-label="Thu nhỏ">−</button>
+              <button className="debt-image-zoom-level" onClick={() => changeZoom(1)} aria-label="Đặt lại kích thước">
+                {Math.round(zoom * 100)}%
+              </button>
+              <button onClick={() => changeZoom(zoom + 0.25)} disabled={zoom >= 5} aria-label="Phóng to">+</button>
+              <button className="debt-image-viewer-close" onClick={closeViewer} aria-label="Đóng">✕</button>
+            </div>
+          </div>
+          <div className={`debt-image-viewer-stage ${zoom > 1 ? 'is-zoomed' : ''}`}
+            onClick={(event) => event.stopPropagation()}
+            onWheel={(event) => {
+              event.preventDefault();
+              changeZoom(zoom + (event.deltaY < 0 ? 0.25 : -0.25));
+            }}
+            onPointerDown={(event) => {
+              if (zoom <= 1) return;
+              event.currentTarget.setPointerCapture(event.pointerId);
+              dragStart.current = { x: event.clientX, y: event.clientY, panX: pan.x, panY: pan.y };
+            }}
+            onPointerMove={(event) => {
+              if (!dragStart.current) return;
+              setPan({
+                x: dragStart.current.panX + event.clientX - dragStart.current.x,
+                y: dragStart.current.panY + event.clientY - dragStart.current.y,
+              });
+            }}
+            onPointerUp={() => { dragStart.current = null; }}
+            onPointerCancel={() => { dragStart.current = null; }}>
+            <img src={debt.image} alt={`Ảnh đính kèm cho ${debt.name}`}
+              style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }} />
+          </div>
+          <span className="debt-image-viewer-hint">Lăn chuột để thu phóng · Kéo ảnh khi đã phóng lớn · Esc để đóng</span>
+        </div>
       ) : null}
     </div>
   );

@@ -272,11 +272,45 @@ button.debt-image-slot { padding: 0; }
 }
 .debt-image-remove input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 .debt-image-error { display: block; margin-top: 3px; color: #ff9a91; font-size: 10px; overflow-wrap: anywhere; }
-.modal.debt-image-viewer { width: auto; max-width: min(1000px, calc(100vw - 24px)); padding: 14px; }
-.debt-image-viewer > div:last-child { margin-top: 8px !important; }
-.debt-image-viewer img {
-  display: block; max-width: 100%; max-height: calc(100vh - 120px); margin: 0 auto;
-  object-fit: contain; border-radius: 10px;
+.debt-image-viewer {
+  position: fixed; inset: 0; z-index: 1000; display: flex; flex-direction: column;
+  background: rgba(5, 8, 18, .97); color: #f7f8ff;
+}
+.debt-image-viewer-toolbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  min-height: 58px; padding: 8px 16px; border-bottom: 1px solid rgba(255, 255, 255, .12);
+  background: rgba(17, 22, 38, .92);
+}
+.debt-image-viewer-toolbar > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.debt-image-zoom-controls { display: flex; align-items: center; gap: 8px; }
+.debt-image-zoom-controls button {
+  min-width: 38px; height: 36px; border: 1px solid rgba(255, 255, 255, .2);
+  border-radius: 9px; background: rgba(255, 255, 255, .09); color: white; cursor: pointer;
+}
+.debt-image-zoom-controls button:disabled { opacity: .4; cursor: default; }
+.debt-image-zoom-controls .debt-image-zoom-level { min-width: 58px; font-size: 12px; }
+.debt-image-zoom-controls .debt-image-viewer-close {
+  margin-left: 6px; background: rgba(255, 255, 255, .16); font-size: 16px;
+}
+.debt-image-viewer-stage {
+  flex: 1; min-height: 0; overflow: hidden; display: grid; place-items: center;
+  touch-action: none; user-select: none;
+}
+.debt-image-viewer-stage.is-zoomed { cursor: grab; }
+.debt-image-viewer-stage.is-zoomed:active { cursor: grabbing; }
+.debt-image-viewer-stage img {
+  display: block; max-width: min(96vw, 1600px); max-height: calc(100vh - 108px);
+  object-fit: contain; transform-origin: center; will-change: transform;
+}
+.debt-image-viewer-hint {
+  min-height: 32px; padding: 5px 12px; color: rgba(255, 255, 255, .62);
+  font-size: 12px; text-align: center;
+}
+@media (max-width: 560px) {
+  .debt-image-viewer-toolbar { min-height: 52px; padding: 7px 10px; }
+  .debt-image-zoom-controls { gap: 5px; }
+  .debt-image-zoom-controls button { min-width: 34px; height: 34px; }
+  .debt-image-viewer-hint { font-size: 10px; }
 }
 .debt-progress-summary {
   margin-top: 10px; padding: 9px 10px; border: 1px solid rgba(255, 255, 255, .1);
