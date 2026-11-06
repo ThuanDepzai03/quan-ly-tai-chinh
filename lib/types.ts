@@ -52,7 +52,7 @@ export interface DebtPayment {
 export interface Debt {
   id: string; workspace_id: string; name: string; kind: DebtKind;
   amount: number; paid: number; start_date?: string | null; due_date?: string | null;
-  payment_history?: DebtPayment[];
+  payment_history?: DebtPayment[]; image?: string | null;
 }
 export interface Reminder {
   id: string; workspace_id: string; title: string; amount?: number | null;

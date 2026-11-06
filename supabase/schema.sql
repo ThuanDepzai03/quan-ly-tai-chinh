@@ -93,7 +93,8 @@ create table if not exists debts (
   paid numeric not null default 0,
   start_date date,
   due_date date,
-  payment_history jsonb not null default '[]'::jsonb
+  payment_history jsonb not null default '[]'::jsonb,
+  image text
 );
 create table if not exists reminders (
   id uuid primary key default gen_random_uuid(),
@@ -260,7 +261,8 @@ alter table debts
   add column if not exists paid numeric not null default 0,
   add column if not exists start_date date,
   add column if not exists due_date date,
-  add column if not exists payment_history jsonb not null default '[]'::jsonb;
+  add column if not exists payment_history jsonb not null default '[]'::jsonb,
+  add column if not exists image text;
 update debts
 set person = coalesce(nullif(btrim(person), ''), nullif(btrim(name), ''), 'Khoản nợ mới')
 where person is null or btrim(person) = '';

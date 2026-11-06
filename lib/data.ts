@@ -190,7 +190,7 @@ export interface AppData {
   deleteGoal: (id: string) => void;
   saveDebt: (input: {
     id?: string; name: string; kind: Debt['kind']; amount: number; paid: number;
-    start_date?: string | null; due_date?: string | null;
+    start_date?: string | null; due_date?: string | null; image?: string | null;
   }) => Promise<string | null>;
   payDebt: (id: string, amount: number, note?: string) => Promise<string | null>;
   increaseDebt: (id: string, amount: number, note?: string) => Promise<string | null>;

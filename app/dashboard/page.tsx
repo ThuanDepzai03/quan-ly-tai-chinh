@@ -10,6 +10,7 @@ import { useAppData } from '@/lib/data';
 import { fmtDate, fmtVND, monthISO, todayISO } from '@/lib/utils';
 import { WALLET_TYPE_LABELS } from '@/lib/types';
 import type { Debt, DebtPayment, Goal, TxType, Wallet } from '@/lib/types';
+import { fileToBase64 } from '@/lib/receipt';
 
 function getDebtHistoryRows(debt: Debt): Array<{ payment: DebtPayment; balanceAfter: number }> {
   const history = debt.payment_history ?? [];
@@ -37,7 +38,7 @@ export default function Dashboard() {
   const [confirmDeleteTx, setConfirmDeleteTx] = useState<string | null>(null);
   const [goalEditor, setGoalEditor] = useState<Goal | 'new' | null>(null);
   const [goalContribution, setGoalContribution] = useState<Goal | null>(null);
-  const [debtEditor, setDebtEditor] = useState<Debt | 'new' | null>(null);
+  const [debtEditor, setDebtEditor] = useState<Debt | 'new-borrow' | 'new-lend' | null>(null);
   const [debtPayment, setDebtPayment] = useState<Debt | null>(null);
   const [debtIncrease, setDebtIncrease] = useState<Debt | null>(null);
 
@@ -90,6 +91,122 @@ export default function Dashboard() {
     state?.categories.find((c) => c.id === id)?.name ?? '—';
   const walletName = (id: string) =>
     state?.wallets.find((w) => w.id === id)?.name ?? '—';
+
+  function renderDebtTable(kind: Debt['kind']) {
+    const rows = debts.filter((debt) => debt.kind === kind);
+    const total = rows.reduce((sum, debt) => sum + debt.amount, 0);
+    const paid = rows.reduce((sum, debt) => sum + debt.paid, 0);
+    const remaining = Math.max(0, total - paid);
+    const progress = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
+    const isBorrow = kind === 'borrow';
+
+    return (
+      <GlassCard
+        key={kind}
+        title={isBorrow ? 'Nợ phải trả' : 'Cho vay / Khách nợ'}
+        action={
+          <button className="btn-small" disabled={!data.currentWorkspace}
+            onClick={() => setDebtEditor(isBorrow ? 'new-borrow' : 'new-lend')}>
+            {isBorrow ? '+ Thêm khoản nợ' : '+ Thêm khoản cho vay'}
+          </button>
+        }
+      >
+        {rows.length === 0 ? (
+          <p className="muted">{isBorrow ? 'Chưa có khoản nợ phải trả.' : 'Chưa có khoản cho vay / khách nợ.'}</p>
+        ) : (
+          <div className="row-list">
+            {rows.map((d) => (
+              <div key={d.id} className="row-item debt-row">
+                <div className="debt-row-main">
+                <div className="debt-row-info">
+                  <b>{d.name}</b>
+                  <div className="sub">
+                    {d.start_date ? `Từ ${fmtDate(d.start_date)}` : 'Chưa ghi ngày bắt đầu'}
+                    {d.due_date ? ` · Hạn ${fmtDate(d.due_date)}` : ''}
+                  </div>
+                  <div>{fmtVND(d.paid)} / {fmtVND(d.amount)} đã {isBorrow ? 'trả' : 'thu'}</div>
+                  {d.payment_history?.length ? (
+                    <details style={{ marginTop: 6 }}>
+                      <summary className="muted" style={{ cursor: 'pointer' }}>
+                        Lịch sử phát sinh ({d.payment_history.length})
+                      </summary>
+                      <div className="row-list debt-history-list" style={{ marginTop: 6 }}>
+                        {getDebtHistoryRows(d).map(({ payment, balanceAfter }) => {
+                          const isIncrease = payment.type === 'increase';
+                          return (
+                            <div key={payment.id} className={`debt-history-item ${isIncrease ? 'debt-history-increase' : 'debt-history-payment'}`}>
+                              <div>
+                                <b>{isIncrease ? '+ ' : '− '}{fmtVND(payment.amount)} · {isIncrease ? 'Tăng nợ' : isBorrow ? 'Đã trả' : 'Đã thu'}</b>
+                                <div className="sub">
+                                  {new Date(payment.created_at).toLocaleString('vi-VN')}
+                                  {payment.note ? ` · ${payment.note}` : ' · Không có ghi chú'}
+                                </div>
+                              </div>
+                              <b className="debt-history-balance">{fmtVND(balanceAfter)}</b>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </details>
+                  ) : d.paid > 0 ? (
+                    <div className="sub">Số đã ghi trước đây; chưa có lịch sử chi tiết.</div>
+                  ) : null}
+                  <div className="debt-balance-summary">
+                    Còn {isBorrow ? 'nợ' : 'phải thu'} <b>{fmtVND(Math.max(0, d.amount - d.paid))}</b>
+                    {d.payment_history?.length ? (() => {
+                      const changes = d.payment_history.reduce((totals, event) => {
+                        if (event.type === 'increase') totals.increased += event.amount;
+                        else totals.paid += event.amount;
+                        return totals;
+                      }, { increased: 0, paid: 0 });
+                      const net = changes.increased - changes.paid;
+                      return <span className="debt-net-change"> · Phát sinh ròng: {net > 0 ? '+' : net < 0 ? '−' : ''}{fmtVND(Math.abs(net))}</span>;
+                    })() : null}
+                  </div>
+                </div>
+                <div className="debt-row-actions">
+                  <button className="btn-ghost btn-small debt-action-increase" onClick={() => setDebtIncrease(d)}>
+                    + Thêm nợ
+                  </button>
+                  {d.paid < d.amount ? (
+                    <button className="btn-small debt-action-payment" onClick={() => setDebtPayment(d)}>
+                      {isBorrow ? 'Ghi trả nợ' : 'Ghi thu nợ'}
+                    </button>
+                  ) : null}
+                  <button className="btn-ghost btn-small" onClick={() => setDebtEditor(d)}>Sửa</button>
+                  <button className="btn-ghost btn-small" onClick={() => {
+                    if (confirm(`Xóa khoản "${d.name}"?`)) data.deleteDebt(d.id);
+                  }}>Xóa</button>
+                </div>
+                </div>
+                <DebtImageSlot debt={d} />
+              </div>
+            ))}
+          </div>
+        )}
+        <div className={`debt-progress-summary ${isBorrow ? 'debt-progress-borrow' : 'debt-progress-lend'}`}>
+          <div className="debt-progress-totals">
+            <span>Tổng <b>{fmtVND(total)}</b></span>
+            <span>Đã {isBorrow ? 'trả' : 'thu'} <b>{fmtVND(paid)}</b></span>
+            <span>Còn <b>{fmtVND(remaining)}</b></span>
+            <b className="debt-progress-percent">{progress}%</b>
+          </div>
+          <div className="debt-milestone-track" role="img"
+            aria-label={`Đã ${isBorrow ? 'trả' : 'thu'} ${progress}%`}>
+            <div className="debt-milestone-fill" style={{ width: `${progress}%` }} />
+            {[25, 50, 75, 100].map((milestone) => (
+              <span key={milestone}
+                className={`debt-milestone ${progress >= milestone ? 'reached' : ''}`}
+                style={{ left: `${milestone}%` }} title={`${milestone}%`} />
+            ))}
+          </div>
+        </div>
+        <p className="muted" style={{ fontSize: 12 }}>
+          Theo dõi công nợ, không tự động cộng/trừ số dư ví.
+        </p>
+      </GlassCard>
+    );
+  }
 
   return (
     <AppShell>
@@ -256,82 +373,9 @@ export default function Dashboard() {
         </GlassCard>
       </div>
 
-      <div className="flex-row" style={{ alignItems: 'stretch' }}>
-        <GlassCard title="Nợ / Cho vay" action={
-          <button className="btn-small" disabled={!data.currentWorkspace} onClick={() => setDebtEditor('new')}>
-            + Thêm khoản nợ
-          </button>
-        }>
-          {debts.length === 0 ? <p className="muted">Không có khoản nợ nào.</p> : (
-            <div className="row-list">
-              {debts.map((d) => (
-                <div key={d.id} className="row-item">
-                  <div style={{ flex: 1 }}>
-                    <b>{d.name}</b>
-                    <div className="sub">{d.kind === 'borrow' ? 'Mình đi vay · Đã trả' : 'Mình cho vay / khách nợ · Đã thu'}
-                      {d.start_date ? ` · Từ ${fmtDate(d.start_date)}` : ' · Chưa ghi ngày bắt đầu'}
-                      {d.due_date ? ` · Hạn ${fmtDate(d.due_date)}` : ''}
-                    </div>
-                    <div>{fmtVND(d.paid)} / {fmtVND(d.amount)} đã {d.kind === 'borrow' ? 'trả' : 'thu'}</div>
-                    {d.payment_history?.length ? (
-                      <details style={{ marginTop: 6 }}>
-                        <summary className="muted" style={{ cursor: 'pointer' }}>
-                          Lịch sử phát sinh ({d.payment_history.length})
-                        </summary>
-                        <div className="row-list debt-history-list" style={{ marginTop: 6 }}>
-                          {getDebtHistoryRows(d).map(({ payment, balanceAfter }) => {
-                            const isIncrease = payment.type === 'increase';
-                            return (
-                              <div key={payment.id} className={`debt-history-item ${isIncrease ? 'debt-history-increase' : 'debt-history-payment'}`}>
-                                <div>
-                                  <b>{isIncrease ? '+ ' : '− '}{fmtVND(payment.amount)} · {isIncrease ? 'Tăng nợ' : d.kind === 'borrow' ? 'Đã trả' : 'Đã thu'}</b>
-                                  <div className="sub">
-                                    {new Date(payment.created_at).toLocaleString('vi-VN')}
-                                    {payment.note ? ` · ${payment.note}` : ' · Không có ghi chú'}
-                                  </div>
-                                </div>
-                                <b className="debt-history-balance">{fmtVND(balanceAfter)}</b>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </details>
-                    ) : d.paid > 0 ? (
-                      <div className="sub">Số đã ghi trước đây; chưa có lịch sử chi tiết.</div>
-                    ) : null}
-                    <div className="debt-balance-summary">
-                      Còn phải {d.kind === 'borrow' ? 'trả' : 'thu'}: <b>{fmtVND(Math.max(0, d.amount - d.paid))}</b>
-                      {d.payment_history?.length ? (() => {
-                        const changes = d.payment_history.reduce((totals, event) => {
-                          if (event.type === 'increase') totals.increased += event.amount;
-                          else totals.paid += event.amount;
-                          return totals;
-                        }, { increased: 0, paid: 0 });
-                        const net = changes.increased - changes.paid;
-                        return <span className="debt-net-change"> · Phát sinh ròng: {net > 0 ? '+' : net < 0 ? '−' : ''}{fmtVND(Math.abs(net))}</span>;
-                      })() : null}
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    <button className="btn-ghost btn-small debt-action-increase" onClick={() => setDebtIncrease(d)}>
-                      + Thêm nợ
-                    </button>
-                    {d.paid < d.amount ? (
-                      <button className="btn-small debt-action-payment" onClick={() => setDebtPayment(d)}>
-                        {d.kind === 'borrow' ? 'Ghi trả nợ' : 'Ghi thu nợ'}
-                      </button>
-                    ) : null}
-                    <button className="btn-ghost btn-small" onClick={() => setDebtEditor(d)}>Sửa</button>
-                    <button className="btn-ghost btn-small" onClick={() => {
-                      if (confirm(`Xóa khoản "${d.name}"?`)) data.deleteDebt(d.id);
-                    }}>Xóa</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          <p className="muted" style={{ fontSize: 12 }}>Theo dõi công nợ, không tự động cộng/trừ số dư ví.</p>
-        </GlassCard>
+      <div className="debt-sections">
+        {renderDebtTable('borrow')}
+        {renderDebtTable('lend')}
       </div>
 
       {showTx && state ? (
@@ -361,7 +405,8 @@ export default function Dashboard() {
       ) : null}
       {debtEditor ? (
         <DebtFormModal
-          debt={debtEditor === 'new' ? null : debtEditor}
+          debt={typeof debtEditor === 'string' ? null : debtEditor}
+          initialKind={debtEditor === 'new-lend' ? 'lend' : 'borrow'}
           onClose={() => setDebtEditor(null)}
           onSaved={() => setDebtEditor(null)}
         />
@@ -457,12 +502,84 @@ function GoalFormModal({ goal, onClose, onSaved }: {
   );
 }
 
-function DebtFormModal({ debt, onClose, onSaved }: {
-  debt: Debt | null; onClose: () => void; onSaved: () => void;
+function DebtImageSlot({ debt }: { debt: Debt }) {
+  const data = useAppData();
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [viewing, setViewing] = useState(false);
+
+  async function saveImage(image: string | null) {
+    setSaving(true);
+    setError('');
+    try {
+      const result = await data.saveDebt({
+        ...debt,
+        image,
+      });
+      if (result) setError(result);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleImageChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    try {
+      await saveImage(await fileToBase64(file));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  }
+
+  return (
+    <div className="debt-image-column">
+      {debt.image ? (
+        <button type="button" className={`debt-image-slot has-image ${saving ? 'is-saving' : ''}`}
+          onClick={() => setViewing(true)} aria-label={`Xem ảnh ${debt.name}`}>
+          <img src={debt.image} alt="" />
+        </button>
+      ) : (
+        <label className={`debt-image-slot ${saving ? 'is-saving' : ''}`}>
+          <span className="debt-image-placeholder">
+            <b aria-hidden="true">+</b>
+            <span>Thêm ảnh</span>
+          </span>
+          <input type="file" accept="image/jpeg,image/png" disabled={saving}
+            aria-label={`Thêm ảnh cho ${debt.name}`} onChange={handleImageChange} />
+        </label>
+      )}
+      {debt.image ? (
+        <div className="debt-image-actions">
+          <label className="debt-image-remove">
+            Thay ảnh
+            <input type="file" accept="image/jpeg,image/png" disabled={saving}
+              aria-label={`Thay ảnh cho ${debt.name}`} onChange={handleImageChange} />
+          </label>
+          <button className="debt-image-remove" disabled={saving} onClick={() => void saveImage(null)}>
+            Gỡ
+          </button>
+        </div>
+      ) : null}
+      {error ? <span className="debt-image-error" role="alert">{error}</span> : null}
+      {viewing && debt.image ? (
+        <Modal title={`Ảnh: ${debt.name}`} onClose={() => setViewing(false)} className="debt-image-viewer">
+          <img src={debt.image} alt={`Ảnh đính kèm cho ${debt.name}`} />
+        </Modal>
+      ) : null}
+    </div>
+  );
+}
+
+function DebtFormModal({ debt, initialKind, onClose, onSaved }: {
+  debt: Debt | null; initialKind: Debt['kind']; onClose: () => void; onSaved: () => void;
 }) {
   const data = useAppData();
   const [name, setName] = useState(debt?.name ?? '');
-  const [kind, setKind] = useState<Debt['kind']>(debt?.kind ?? 'borrow');
+  const [kind, setKind] = useState<Debt['kind']>(debt?.kind ?? initialKind);
   const [amount, setAmount] = useState(debt ? String(debt.amount) : '');
   const [startDate, setStartDate] = useState(debt?.start_date ?? todayISO());
   const [dueDate, setDueDate] = useState(debt?.due_date ?? '');
