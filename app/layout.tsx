@@ -20,10 +20,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               href="https://www.facebook.com/Theplay.Hacker.ss/"
               target="_blank"
               rel="noopener noreferrer"
-              aria-label="Tác giả Theplay trên Facebook"
+              aria-label="Tác giả Thuận"
             >
               <span>Tác giả</span>
-              <strong>Theplay</strong>
+              <strong>Thuận</strong>
               <span className="author-sparkle" aria-hidden="true">✦</span>
             </a>
           </footer>
