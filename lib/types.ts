@@ -51,7 +51,8 @@ export interface DebtPayment {
 }
 export interface Debt {
   id: string; workspace_id: string; name: string; kind: DebtKind;
-  amount: number; paid: number; due_date?: string | null; payment_history?: DebtPayment[];
+  amount: number; paid: number; start_date?: string | null; due_date?: string | null;
+  payment_history?: DebtPayment[];
 }
 export interface Reminder {
   id: string; workspace_id: string; title: string; amount?: number | null;

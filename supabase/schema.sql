@@ -86,10 +86,12 @@ create table if not exists goals (
 create table if not exists debts (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid references workspaces(id) on delete cascade,
+  person text not null default 'Khoản nợ mới',
   name text not null,
   kind text not null check (kind in ('borrow','lend')),
   amount numeric not null,
   paid numeric not null default 0,
+  start_date date,
   due_date date,
   payment_history jsonb not null default '[]'::jsonb
 );
@@ -251,12 +253,20 @@ alter table goals
   add column if not exists deadline date;
 alter table debts
   add column if not exists workspace_id uuid references workspaces(id) on delete cascade,
+  add column if not exists person text,
   add column if not exists name text not null default 'Khoản nợ mới',
   add column if not exists kind text not null default 'borrow',
   add column if not exists amount numeric not null default 0,
   add column if not exists paid numeric not null default 0,
+  add column if not exists start_date date,
   add column if not exists due_date date,
   add column if not exists payment_history jsonb not null default '[]'::jsonb;
+update debts
+set person = coalesce(nullif(btrim(person), ''), nullif(btrim(name), ''), 'Khoản nợ mới')
+where person is null or btrim(person) = '';
+alter table debts
+  alter column person set default 'Khoản nợ mới',
+  alter column person set not null;
 alter table reminders
   add column if not exists workspace_id uuid references workspaces(id) on delete cascade,
   add column if not exists title text not null default 'Nhắc việc mới',

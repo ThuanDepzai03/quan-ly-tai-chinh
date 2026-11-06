@@ -7,7 +7,7 @@ import GlassCard, { Field, Modal } from '@/components/GlassCard';
 import TransactionForm from '@/components/TransactionForm';
 import WalletForm from '@/components/WalletForm';
 import { useAppData } from '@/lib/data';
-import { fmtDate, fmtVND, monthISO } from '@/lib/utils';
+import { fmtDate, fmtVND, monthISO, todayISO } from '@/lib/utils';
 import { WALLET_TYPE_LABELS } from '@/lib/types';
 import type { Debt, Goal, TxType, Wallet } from '@/lib/types';
 
@@ -253,6 +253,7 @@ export default function Dashboard() {
                   <div style={{ flex: 1 }}>
                     <b>{d.name}</b>
                     <div className="sub">{d.kind === 'borrow' ? 'Mình đi vay · Đã trả' : 'Mình cho vay / khách nợ · Đã thu'}
+                      {d.start_date ? ` · Từ ${fmtDate(d.start_date)}` : ' · Chưa ghi ngày bắt đầu'}
                       {d.due_date ? ` · Hạn ${fmtDate(d.due_date)}` : ''}
                     </div>
                     <div>{fmtVND(d.paid)} / {fmtVND(d.amount)} <span className="sub">· Còn {fmtVND(Math.max(0, d.amount - d.paid))}</span></div>
@@ -425,6 +426,7 @@ function DebtFormModal({ debt, onClose, onSaved }: {
   const [name, setName] = useState(debt?.name ?? '');
   const [kind, setKind] = useState<Debt['kind']>(debt?.kind ?? 'borrow');
   const [amount, setAmount] = useState(debt ? String(debt.amount) : '');
+  const [startDate, setStartDate] = useState(debt?.start_date ?? todayISO());
   const [dueDate, setDueDate] = useState(debt?.due_date ?? '');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -443,7 +445,8 @@ function DebtFormModal({ debt, onClose, onSaved }: {
     try {
       const result = await data.saveDebt({
         id: debt?.id, name: name.trim(), kind,
-        amount: amountValue, paid: debt?.paid ?? 0, due_date: dueDate || null,
+        amount: amountValue, paid: debt?.paid ?? 0,
+        start_date: startDate || null, due_date: dueDate || null,
       });
       if (result) { setError(result); return; }
       onSaved();
@@ -468,6 +471,9 @@ function DebtFormModal({ debt, onClose, onSaved }: {
         </Field>
         <Field label="Tổng số tiền (đ)">
           <input type="number" min={1} value={amount} onChange={(event) => setAmount(event.target.value)} required />
+        </Field>
+        <Field label="Ngày bắt đầu khoản nợ">
+          <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} required />
         </Field>
         {debt ? (
           <p className="muted">Đã ghi nhận: <b>{fmtVND(debt.paid)}</b>. Dùng nút ghi trả/thu ở danh sách để lưu từng lần kèm ngày giờ và ghi chú.</p>

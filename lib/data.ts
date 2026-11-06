@@ -63,6 +63,14 @@ function getCloudTransactionRow(row: Record<string, unknown>): Record<string, un
   return { ...row, occurred_at: `${date}T00:00:00.000Z` };
 }
 
+function getCloudDebtRow(row: Record<string, unknown>): Record<string, unknown> {
+  const name = typeof row.name === 'string' ? row.name : row.person;
+  if (typeof name !== 'string' || !name.trim()) {
+    throw new Error('Không thể lưu khoản nợ lên Supabase vì thiếu tên người hoặc khoản nợ.');
+  }
+  return { ...row, name: name.trim(), person: name.trim() };
+}
+
 function loadLocal(user: AppUser): AppState | null {
   try {
     const raw = localStorage.getItem(stateKey(user.id));
@@ -129,7 +137,8 @@ async function upsertCloudStateRows(sb: NonNullable<ReturnType<typeof createClie
     getCloudTransactionRow(transaction as unknown as Record<string, unknown>)));
   await upsert('budgets', s.budgets as unknown as Array<Record<string, unknown>>);
   await upsert('goals', s.goals as unknown as Array<Record<string, unknown>>);
-  await upsert('debts', s.debts as unknown as Array<Record<string, unknown>>);
+  await upsert('debts', s.debts.map((debt) =>
+    getCloudDebtRow(debt as unknown as Record<string, unknown>)));
   await upsert('reminders', s.reminders as unknown as Array<Record<string, unknown>>);
   await upsert('stock_movements', s.stockMovements as unknown as Array<Record<string, unknown>>);
   await upsert('tax_payments', s.taxPayments as unknown as Array<Record<string, unknown>>);
@@ -179,7 +188,10 @@ export interface AppData {
   saveGoal: (input: { id?: string; name: string; target: number; saved: number; deadline?: string | null }) => Promise<string | null>;
   contributeGoal: (id: string, amount: number) => Promise<string | null>;
   deleteGoal: (id: string) => void;
-  saveDebt: (input: { id?: string; name: string; kind: Debt['kind']; amount: number; paid: number; due_date?: string | null }) => Promise<string | null>;
+  saveDebt: (input: {
+    id?: string; name: string; kind: Debt['kind']; amount: number; paid: number;
+    start_date?: string | null; due_date?: string | null;
+  }) => Promise<string | null>;
   payDebt: (id: string, amount: number, note?: string) => Promise<string | null>;
   deleteDebt: (id: string) => void;
   saveReminder: (input: { id?: string; title: string; amount?: number | null; next_date: string; frequency: Reminder['frequency'] }) => Promise<string | null>;
@@ -404,7 +416,8 @@ function useAppDataState(): AppData {
   const cloudUpsert = useCallback((table: TableName, row: Record<string, unknown>) => async () => {
     const sb = createClient();
     if (!sb) return;
-    const cloudRow = table === 'transactions' ? getCloudTransactionRow(row) : row;
+    const cloudRow = table === 'transactions' ? getCloudTransactionRow(row)
+      : table === 'debts' ? getCloudDebtRow(row) : row;
     const { error } = await sb.from(table).upsert(cloudRow as never);
     if (error) throw new Error(`Supabase upsert ${table} lỗi: ${error.message}`);
   }, []);
@@ -766,7 +779,11 @@ function useAppDataState(): AppData {
         return update((prev) => ({ ...prev, debts: prev.debts.map((d) => (d.id === input.id ? { ...d, ...input } : d)) }),
           [cloudUpsert('debts', { ...input, workspace_id: p.currentWorkspaceId })]);
       } else {
-        const d: Debt = { ...input, id: uid(), workspace_id: p.currentWorkspaceId, payment_history: [] };
+        const d: Debt = {
+          ...input, id: uid(), workspace_id: p.currentWorkspaceId,
+          start_date: input.start_date ?? new Date().toISOString().slice(0, 10),
+          payment_history: [],
+        };
         return update((prev) => ({ ...prev, debts: [...prev.debts, d] }), [cloudUpsert('debts', d as unknown as Record<string, unknown>)]);
       }
     },
