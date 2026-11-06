@@ -64,6 +64,7 @@ create table if not exists transactions (
   tax_rate numeric,
   note text,
   date date not null default current_date,
+  occurred_at timestamptz not null default now(),
   created_at timestamptz default now()
 );
 create table if not exists budgets (
@@ -224,7 +225,14 @@ alter table transactions
   add column if not exists receipt_image text,
   add column if not exists note text,
   add column if not exists date date not null default current_date,
+  add column if not exists occurred_at timestamptz default now(),
   add column if not exists created_at timestamptz default now();
+update transactions
+set occurred_at = date::timestamptz
+where occurred_at is null;
+alter table transactions
+  alter column occurred_at set default now(),
+  alter column occurred_at set not null;
 -- Một số database cũ có cột transactions.kind NOT NULL; ứng dụng hiện dùng
 -- transactions.type. Cho phép cột legacy để trống để không chặn giao dịch mới.
 alter table transactions add column if not exists kind text;

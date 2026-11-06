@@ -55,6 +55,14 @@ function getCloudProductVariantRows(state: AppState): Array<Record<string, unkno
   });
 }
 
+function getCloudTransactionRow(row: Record<string, unknown>): Record<string, unknown> {
+  const date = row.date;
+  if (typeof date !== 'string' || !date) {
+    throw new Error('Không thể lưu giao dịch lên Supabase vì thiếu ngày giao dịch.');
+  }
+  return { ...row, occurred_at: `${date}T00:00:00.000Z` };
+}
+
 function loadLocal(user: AppUser): AppState | null {
   try {
     const raw = localStorage.getItem(stateKey(user.id));
@@ -117,7 +125,8 @@ async function upsertCloudStateRows(sb: NonNullable<ReturnType<typeof createClie
   await upsert('products', s.products as unknown as Array<Record<string, unknown>>);
   await upsert('product_variants', getCloudProductVariantRows(s));
   await upsert('product_fields', s.productFields as unknown as Array<Record<string, unknown>>);
-  await upsert('transactions', s.transactions as unknown as Array<Record<string, unknown>>);
+  await upsert('transactions', s.transactions.map((transaction) =>
+    getCloudTransactionRow(transaction as unknown as Record<string, unknown>)));
   await upsert('budgets', s.budgets as unknown as Array<Record<string, unknown>>);
   await upsert('goals', s.goals as unknown as Array<Record<string, unknown>>);
   await upsert('debts', s.debts as unknown as Array<Record<string, unknown>>);
@@ -395,7 +404,8 @@ function useAppDataState(): AppData {
   const cloudUpsert = useCallback((table: TableName, row: Record<string, unknown>) => async () => {
     const sb = createClient();
     if (!sb) return;
-    const { error } = await sb.from(table).upsert(row as never);
+    const cloudRow = table === 'transactions' ? getCloudTransactionRow(row) : row;
+    const { error } = await sb.from(table).upsert(cloudRow as never);
     if (error) throw new Error(`Supabase upsert ${table} lỗi: ${error.message}`);
   }, []);
   const cloudDelete = useCallback((table: TableName, id: string) => async () => {
