@@ -13,7 +13,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="vi">
       <body>
         <AppDataProvider>
-          <div style={{ maxWidth: 1080, margin: '0 auto', padding: '20px 16px 64px' }}>{children}</div>
+          <div className="page-container">{children}</div>
           <footer className="site-footer">
             <a
               className="author-link"
