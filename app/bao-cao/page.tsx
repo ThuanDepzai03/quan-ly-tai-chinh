@@ -4,8 +4,9 @@ import AppShell from '@/components/AppShell';
 import GlassCard, { StatCard } from '@/components/GlassCard';
 import { useAppData } from '@/lib/data';
 import {
-  downloadCSV, downloadXLSX, fmtDate, fmtVND, groupByMonth, monthISO, tax88,
+  downloadCSV, downloadXLSX, estimateWorkspaceTax, fmtDate, fmtVND, groupByMonth, monthISO,
 } from '@/lib/utils';
+import { TAX_CALCULATION_METHOD_LABELS } from '@/lib/types';
 
 type ChartPeriod = 'week' | 'month' | 'year-month' | 'year-day';
 type ChartMetricKey = 'income' | 'expense' | 'salesProfit' | 'net' | 'transfer';
@@ -251,7 +252,16 @@ export default function BaoCao() {
   const income = txs.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0);
   const expense = txs.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
   const profit = txs.reduce((s, t) => s + (t.profit ?? 0), 0);
-  const tax = tax88(income, currentWorkspace?.vat_rate ?? 0.01, currentWorkspace?.tncn_rate ?? 0.005);
+  const taxMethod = currentWorkspace?.tax_method ?? 'turnover_tncn';
+  const tax = estimateWorkspaceTax({
+    method: taxMethod,
+    revenue: income,
+    recordedProfit: profit,
+    vatRate: currentWorkspace?.vat_rate ?? 0.01,
+    tncnRate: currentWorkspace?.tncn_rate ?? 0.005,
+    tndnRate: currentWorkspace?.tndn_rate ?? 0.2,
+    monthlyDeduction: currentWorkspace?.tncn_deduction ?? 11000000,
+  });
 
   const byProduct = useMemo(() => {
     const map = new Map<string, { name: string; qty: number; revenue: number; cost: number; profit: number }>();
@@ -313,7 +323,12 @@ export default function BaoCao() {
 
   async function exportXLSX() {
     await downloadXLSX(`bao-cao-${month}.xlsx`, [
-      { name: 'Tong hop', rows: [{ 'Tháng': month, 'Tổng thu': income, 'Tổng chi': expense, 'Lãi bán hàng': profit, 'VAT khoán 1%': tax.vat, 'TNCN khoán 0,5%': tax.tncn, 'Tổng thuế khoán': tax.total }] },
+      { name: 'Tong hop', rows: [{
+        'Tháng': month, 'Tổng thu': income, 'Tổng chi': expense, 'Lãi bán hàng': profit,
+        'Thông tư kế toán': currentWorkspace?.tax_circular ?? 'TT88/2021',
+        'Phương pháp thuế thu nhập': TAX_CALCULATION_METHOD_LABELS[taxMethod],
+        'VAT ước tính': tax.vat, [tax.incomeTaxLabel]: tax.incomeTax, 'Tổng thuế ước tính': tax.total,
+      }] },
       { name: 'Giao dich', rows: txRows() },
       {
         name: 'Lai theo san pham',
@@ -351,7 +366,7 @@ export default function BaoCao() {
           <StatCard label={`Tổng thu tháng ${month}`} value={fmtVND(income)} sub={`${txs.filter((t) => t.type === 'income').length} giao dịch thu`} />
           <StatCard label={`Tổng chi tháng ${month}`} value={fmtVND(expense)} sub={`${txs.filter((t) => t.type === 'expense').length} giao dịch chi`} />
           <StatCard label="Lãi bán hàng" value={fmtVND(profit)} sub="Doanh thu − Giá vốn" />
-          <StatCard label="Thuế khoán TT88" value={fmtVND(tax.total)} sub={`VAT ${fmtVND(tax.vat)} + TNCN ${fmtVND(tax.tncn)}`} />
+          <StatCard label={`Thuế ước tính · ${TAX_CALCULATION_METHOD_LABELS[taxMethod]}`} value={fmtVND(tax.total)} sub={`VAT ${fmtVND(tax.vat)} + ${tax.incomeTaxLabel}: ${fmtVND(tax.incomeTax)}`} />
         </div>
       </GlassCard>
 

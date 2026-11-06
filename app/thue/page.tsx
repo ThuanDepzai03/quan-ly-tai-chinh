@@ -4,11 +4,12 @@ import AppShell from '@/components/AppShell';
 import GlassCard, { EmptyState, Field, Modal, StatCard } from '@/components/GlassCard';
 import { useAppData } from '@/lib/data';
 import {
-  calcTNCNProgressive, calcTNDN, downloadCSV, downloadXLSX, fmtDate,
-  fmtVND, monBaiByRevenue, monthISO, quarterOf, tax88,
+  downloadCSV, downloadXLSX, estimateWorkspaceTax, fmtDate,
+  fmtVND, monBaiByRevenue, monthISO, quarterOf,
 } from '@/lib/utils';
-import { TAX_CIRCULAR_LABELS } from '@/lib/types';
+import { TAX_CALCULATION_METHOD_LABELS, TAX_CIRCULAR_LABELS } from '@/lib/types';
 import type { TaxCircular, TaxKind } from '@/lib/types';
+import type { TaxCalculationMethod } from '@/lib/types';
 
 const BOOKS = [
   { code: 'S1-HKD', name: 'Sổ chi tiết doanh thu bán hàng, cung cấp dịch vụ' },
@@ -26,7 +27,6 @@ export default function Thue() {
   const [period, setPeriod] = useState<'month' | 'quarter' | 'year'>('quarter');
   const [manualRevenue, setManualRevenue] = useState('');
   const [showForm, setShowForm] = useState(false);
-  const [circular, setCircular] = useState<TaxCircular>('TT88/2021');
 
   const wsId = state?.currentWorkspaceId ?? null;
   const ws = currentWorkspace;
@@ -46,10 +46,21 @@ export default function Thue() {
   const revenue = manualRevenue ? Number(manualRevenue) || 0 : revenueFromTx;
   const expense = periodTxs.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
   const profit = periodTxs.reduce((s, t) => s + (t.profit ?? 0), 0);
-  const rates = ws ?? { vat_rate: 0.01, tncn_rate: 0.005, tndn_rate: 0.2, mon_bai: 1000000 };
-  const t88 = tax88(revenue, rates.vat_rate, rates.tncn_rate);
-  const tncnProgressive = calcTNCNProgressive(Math.max(0, revenue - 11000000));
-  const tndn = calcTNDN(profit, rates.tndn_rate);
+  const rates = ws ?? {
+    vat_rate: 0.01, tncn_rate: 0.005, tndn_rate: 0.2, mon_bai: 1000000,
+    tncn_deduction: 11000000, tax_method: 'turnover_tncn' as const,
+  };
+  const taxMethod = ws?.tax_method ?? 'turnover_tncn';
+  const taxEstimate = estimateWorkspaceTax({
+    method: taxMethod,
+    revenue,
+    recordedProfit: profit,
+    vatRate: rates.vat_rate,
+    tncnRate: rates.tncn_rate,
+    tndnRate: rates.tndn_rate,
+    monthlyDeduction: rates.tncn_deduction ?? 11000000,
+    periodMonths: period === 'month' ? 1 : period === 'quarter' ? 3 : 12,
+  });
   const monBai = monBaiByRevenue(revenue * (period === 'year' ? 1 : period === 'quarter' ? 4 : 12));
   const payments = useMemo(
     () => (state?.taxPayments ?? []).filter((t) => t.workspace_id === wsId),
@@ -95,8 +106,10 @@ export default function Thue() {
   function exportTaxCSV() {
     downloadCSV(`thue-${periodKey.replace('/', '-')}.csv`, [
       { 'Kỳ': periodKey, 'Doanh thu': revenue, 'Chi phí': expense, 'Lãi bán hàng': profit,
-        'VAT khoán (1%)': t88.vat, 'TNCN khoán (0,5%)': t88.tncn, 'Tổng thuế khoán': t88.total,
-        'TNCN lũy tiến (tham khảo)': tncnProgressive, 'TNDN 20% trên lãi': tndn,
+        'Thông tư kế toán': ws?.tax_circular ?? 'TT88/2021',
+        'Phương pháp thuế thu nhập': TAX_CALCULATION_METHOD_LABELS[taxMethod],
+        'VAT ước tính': taxEstimate.vat, [taxEstimate.incomeTaxLabel]: taxEstimate.incomeTax,
+        'Tổng thuế ước tính': taxEstimate.total,
         'Môn bài ước tính': monBai, 'Đã nộp': paidTotal, 'Còn phải nộp (đã ghi)': dueTotal },
     ]);
   }
@@ -105,8 +118,8 @@ export default function Thue() {
     <AppShell>
       <div className="flex-row">
         <StatCard label={`Doanh thu ${periodKey}`} value={fmtVND(revenue)} sub={manualRevenue ? 'Nhập tay' : 'Tính từ giao dịch đã ghi'} />
-        <StatCard label="Thuế khoán phải nộp" value={fmtVND(t88.total)} sub={`VAT ${fmtVND(t88.vat)} + TNCN ${fmtVND(t88.tncn)}`} />
-        <StatCard label="TNDN trên lãi (tham khảo)" value={fmtVND(tndn)} sub={`Lãi ${fmtVND(profit)} × 20%`} />
+        <StatCard label="Thuế ước tính theo phương pháp đã chọn" value={fmtVND(taxEstimate.total)} sub={`VAT ${fmtVND(taxEstimate.vat)} + ${taxEstimate.incomeTaxLabel}: ${fmtVND(taxEstimate.incomeTax)}`} />
+        <StatCard label={taxEstimate.incomeTaxLabel} value={fmtVND(taxEstimate.incomeTax)} sub={taxEstimate.incomeTaxFormula} />
         <StatCard label="Thuế đã ghi: đã nộp / chưa nộp" value={`${fmtVND(paidTotal)} / ${fmtVND(dueTotal)}`} sub="Theo sổ nộp thuế bên dưới" />
         <StatCard label="Môn bài ước tính năm nay" value={fmtVND(monBai)} sub={`Doanh thu năm ${fmtVND(yearRevenue)}`} />
       </div>
@@ -123,16 +136,24 @@ export default function Thue() {
         </div>
       }>
         <div className="form-row">
-          <Field label="Thông tư áp dụng">
-            <select value={ws?.tax_circular ?? circular} onChange={(e) => {
+          <Field label="Chế độ kế toán / thông tư tham chiếu">
+            <select value={ws?.tax_circular ?? 'TT88/2021'} onChange={(e) => {
               const c = e.target.value as TaxCircular;
-              setCircular(c);
               data.updateTaxSettings({ tax_circular: c });
             }}>
               {(Object.keys(TAX_CIRCULAR_LABELS) as TaxCircular[]).map((c) => (
                 <option key={c} value={c}>{TAX_CIRCULAR_LABELS[c]}</option>
               ))}
             </select>
+          </Field>
+          <Field label="Phương pháp ước tính thuế thu nhập">
+              <select value={taxMethod} onChange={(e) => {
+                data.updateTaxSettings({ tax_method: e.target.value as TaxCalculationMethod });
+              }}>
+                {(Object.keys(TAX_CALCULATION_METHOD_LABELS) as TaxCalculationMethod[]).map((method) => (
+                  <option key={method} value={method}>{TAX_CALCULATION_METHOD_LABELS[method]}</option>
+                ))}
+              </select>
           </Field>
           <Field label="Doanh thu kỳ (đ) — để trống = tự tính từ giao dịch">
             <input type="number" min={0} placeholder={String(revenueFromTx)} value={manualRevenue}
@@ -143,18 +164,15 @@ export default function Thue() {
           <table className="data">
             <thead><tr><th>Khoản thuế</th><th>Cách tính</th><th>Số tiền</th></tr></thead>
             <tbody>
-              <tr><td>VAT khoán</td><td>Doanh thu × {(rates.vat_rate * 100).toFixed(1)}%</td><td>{fmtVND(t88.vat)}</td></tr>
-              <tr><td>TNCN khoán</td><td>Doanh thu × {(rates.tncn_rate * 100).toFixed(1)}%</td><td>{fmtVND(t88.tncn)}</td></tr>
-              <tr><td><b>Tổng thuế khoán TT88</b></td><td>VAT + TNCN</td><td><b>{fmtVND(t88.total)}</b></td></tr>
-              <tr><td>TNCN lũy tiến (tham khảo, cá nhân)</td><td>Biểu lũy tiến trên thu nhập tính thuế</td><td>{fmtVND(tncnProgressive)}</td></tr>
-              <tr><td>TNDN (tham khảo, DN)</td><td>Lãi × {(rates.tndn_rate * 100).toFixed(0)}%</td><td>{fmtVND(tndn)}</td></tr>
+              <tr><td>VAT (ước tính)</td><td>Doanh thu × {(rates.vat_rate * 100).toLocaleString('vi-VN')}%</td><td>{fmtVND(taxEstimate.vat)}</td></tr>
+              <tr><td>{taxEstimate.incomeTaxLabel}</td><td>{taxEstimate.incomeTaxFormula}</td><td>{fmtVND(taxEstimate.incomeTax)}</td></tr>
+              <tr><td><b>Tổng thuế ước tính</b></td><td>VAT + phương pháp đã chọn</td><td><b>{fmtVND(taxEstimate.total)}</b></td></tr>
               <tr><td>Môn bài (ước tính)</td><td>Theo bậc doanh thu năm</td><td>{fmtVND(monBai)}</td></tr>
             </tbody>
           </table>
         </div>
         <p className="muted" style={{ fontSize: 13 }}>
-          Tỷ lệ trên là mẫu theo TT88/2021 — đối chiếu lại thông báo của cơ quan thuế trước khi nộp.
-          Đổi thông tư ở trên sẽ đổi cách tính mặc định cho workspace này.
+          Thông tư kế toán chỉ chọn chế độ sổ sách; phương pháp và thuế suất được cấu hình riêng ở Cài đặt. Đây là số ước tính theo dữ liệu/tỷ lệ bạn nhập, không thay thế việc xác định nghĩa vụ thuế với cơ quan thuế.
         </p>
       </GlassCard>
 
@@ -184,6 +202,11 @@ export default function Thue() {
       </GlassCard>
 
       <GlassCard title="7 sổ kế toán TT88/2021 (S1–S7-HKD)">
+        {ws?.tax_circular && ws.tax_circular !== 'TT88/2021' ? (
+          <p className="muted" style={{ fontSize: 13 }}>
+            Đang chọn {TAX_CIRCULAR_LABELS[ws.tax_circular]}, nhưng mẫu sổ và file Excel hiện tại vẫn là S1–S7-HKD theo TT88/2021. Chưa có bộ biểu mẫu TT133/TT200 tương ứng.
+          </p>
+        ) : null}
         <div className="row-list">
           {BOOKS.map((b) => (
             <div key={b.code} className="row-item">

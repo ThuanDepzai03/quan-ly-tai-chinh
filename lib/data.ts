@@ -44,12 +44,27 @@ const STATE_TO_TABLE: Record<string, TableName> = {
   taxPayments: 'tax_payments', taxSettings: 'tax_settings',
 };
 
+function getCloudProductVariantRows(state: AppState): Array<Record<string, unknown>> {
+  const workspaceByProductId = new Map(state.products.map((product) => [product.id, product.workspace_id]));
+  return state.productVariants.map((variant) => {
+    const workspaceId = workspaceByProductId.get(variant.product_id);
+    if (!workspaceId) {
+      throw new Error(`Không xác định được không gian làm việc của biến thể "${variant.name}".`);
+    }
+    return { ...variant, workspace_id: workspaceId };
+  });
+}
+
 function loadLocal(user: AppUser): AppState | null {
   try {
     const raw = localStorage.getItem(stateKey(user.id));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as AppState;
     parsed.user = user;
+    parsed.workspaces = (parsed.workspaces ?? []).map((workspace) => ({
+      ...workspace,
+      tax_method: workspace.tax_method ?? 'turnover_tncn',
+    }));
     return parsed;
   } catch { return null; }
 }
@@ -100,7 +115,7 @@ async function upsertCloudStateRows(sb: NonNullable<ReturnType<typeof createClie
   await upsert('categories', s.categories as unknown as Array<Record<string, unknown>>);
   await upsert('product_categories', s.productCategories as unknown as Array<Record<string, unknown>>);
   await upsert('products', s.products as unknown as Array<Record<string, unknown>>);
-  await upsert('product_variants', s.productVariants as unknown as Array<Record<string, unknown>>);
+  await upsert('product_variants', getCloudProductVariantRows(s));
   await upsert('product_fields', s.productFields as unknown as Array<Record<string, unknown>>);
   await upsert('transactions', s.transactions as unknown as Array<Record<string, unknown>>);
   await upsert('budgets', s.budgets as unknown as Array<Record<string, unknown>>);
@@ -173,7 +188,7 @@ export interface AppData {
   saveTaxPayment: (input: { id?: string; tax_type: TaxPayment['tax_type']; period: string; amount: number; paid: boolean; due_date?: string | null; note?: string | null }) => Promise<string | null>;
   toggleTaxPaid: (id: string) => void;
   deleteTaxPayment: (id: string) => void;
-  updateTaxSettings: (patch: Partial<Pick<Workspace, 'tax_circular' | 'vat_rate' | 'tncn_rate' | 'tndn_rate' | 'mon_bai' | 'tncn_deduction'>>) => void;
+  updateTaxSettings: (patch: Partial<Pick<Workspace, 'tax_circular' | 'tax_method' | 'vat_rate' | 'tncn_rate' | 'tndn_rate' | 'mon_bai' | 'tncn_deduction'>>) => void;
   /** Nạp chỉ phần kho mẫu (11 sản phẩm...) vào workspace hiện tại, chỉ khi
    *  kho đang trống — tương đương seedDemoInventory của bản demo. */
   seedDemoInventory: () => Promise<string | null>;
@@ -284,7 +299,10 @@ function useAppDataState(): AppData {
             (loaded as unknown as Record<string, unknown>)[key] = data as unknown;
           }
           if (!cancelled) {
-            const wsList = (loaded.workspaces ?? []) as Workspace[];
+            const wsList = ((loaded.workspaces ?? []) as Workspace[]).map((workspace) => ({
+              ...workspace,
+              tax_method: workspace.tax_method ?? 'turnover_tncn',
+            }));
             const full: AppState = {
               user: cloudUser, workspaces: wsList,
               currentWorkspaceId: wsList[0]?.id ?? null,
@@ -471,6 +489,7 @@ function useAppDataState(): AppData {
           tndn_rate: input.tndn_rate ?? prevWs?.tndn_rate ?? 0.2,
           mon_bai: input.mon_bai ?? prevWs?.mon_bai ?? 1000000,
           tncn_deduction: input.tncn_deduction ?? prevWs?.tncn_deduction ?? 11000000,
+          tax_method: prevWs.tax_method ?? 'turnover_tncn',
         };
       } else {
         workspace = {
@@ -479,6 +498,7 @@ function useAppDataState(): AppData {
           vat_rate: input.vat_rate ?? 0.01, tncn_rate: input.tncn_rate ?? 0.005,
           tndn_rate: input.tndn_rate ?? 0.2, mon_bai: input.mon_bai ?? 1000000,
           tncn_deduction: input.tncn_deduction ?? 11000000,
+          tax_method: 'turnover_tncn',
           created_at: new Date().toISOString(),
         };
       }
@@ -940,6 +960,7 @@ function useAppDataState(): AppData {
         cloudUpsert('workspaces', merged as unknown as Record<string, unknown>),
         cloudUpsert('tax_settings', {
           id: merged.id, workspace_id: merged.id, circular: merged.tax_circular,
+          tax_method: merged.tax_method ?? 'turnover_tncn',
           vat_rate: merged.vat_rate, tncn_rate: merged.tncn_rate,
           tndn_rate: merged.tndn_rate, mon_bai: merged.mon_bai,
         }),

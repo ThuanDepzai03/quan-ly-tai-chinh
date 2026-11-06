@@ -13,6 +13,8 @@ create table if not exists workspaces (
   name text not null,
   mode text not null check (mode in ('personal','household','team')),
   tax_circular text not null default 'TT88/2021',
+  tax_method text not null default 'turnover_tncn'
+    check (tax_method in ('turnover_tncn','profit_tndn','progressive_tncn')),
   vat_rate numeric not null default 0.01,
   tncn_rate numeric not null default 0.005,
   tndn_rate numeric not null default 0.20,
@@ -120,6 +122,7 @@ create table if not exists products (
 );
 create table if not exists product_variants (
   id uuid primary key default gen_random_uuid(),
+  workspace_id uuid not null references workspaces(id) on delete cascade,
   product_id uuid references products(id) on delete cascade,
   name text not null,
   cost_price numeric not null default 0,
@@ -161,6 +164,8 @@ create table if not exists tax_settings (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid references workspaces(id) on delete cascade unique,
   circular text not null default 'TT88/2021',
+  tax_method text not null default 'turnover_tncn'
+    check (tax_method in ('turnover_tncn','profit_tndn','progressive_tncn')),
   vat_rate numeric not null default 0.01,
   tncn_rate numeric not null default 0.005,
   tndn_rate numeric not null default 0.20,
@@ -175,6 +180,8 @@ alter table workspaces
   add column if not exists name text not null default 'Không gian của tôi',
   add column if not exists mode text not null default 'household',
   add column if not exists tax_circular text not null default 'TT88/2021',
+  add column if not exists tax_method text not null default 'turnover_tncn'
+    check (tax_method in ('turnover_tncn','profit_tndn','progressive_tncn')),
   add column if not exists vat_rate numeric not null default 0.01,
   add column if not exists tncn_rate numeric not null default 0.005,
   add column if not exists tndn_rate numeric not null default 0.20,
@@ -265,12 +272,20 @@ alter table products
   add column if not exists image text,
   add column if not exists created_at timestamptz default now();
 alter table product_variants
+  add column if not exists workspace_id uuid references workspaces(id) on delete cascade,
   add column if not exists product_id uuid references products(id) on delete cascade,
   add column if not exists name text not null default 'Biến thể mới',
   add column if not exists cost_price numeric not null default 0,
   add column if not exists sale_price numeric not null default 0,
   add column if not exists stock numeric not null default 0,
   add column if not exists imeis text[] not null default '{}';
+update product_variants v
+set workspace_id = p.workspace_id
+from products p
+where v.product_id = p.id
+  and v.workspace_id is null;
+alter table product_variants
+  alter column workspace_id set not null;
 alter table product_fields
   add column if not exists workspace_id uuid references workspaces(id) on delete cascade,
   add column if not exists name text not null default 'Thuộc tính mới',
@@ -298,6 +313,8 @@ alter table tax_payments
 alter table tax_settings
   add column if not exists workspace_id uuid references workspaces(id) on delete cascade,
   add column if not exists circular text not null default 'TT88/2021',
+  add column if not exists tax_method text not null default 'turnover_tncn'
+    check (tax_method in ('turnover_tncn','profit_tndn','progressive_tncn')),
   add column if not exists vat_rate numeric not null default 0.01,
   add column if not exists tncn_rate numeric not null default 0.005,
   add column if not exists tndn_rate numeric not null default 0.20,

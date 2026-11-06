@@ -7,7 +7,7 @@ import GlassCard, { Modal } from '@/components/GlassCard';
 import TransactionForm from '@/components/TransactionForm';
 import WalletForm from '@/components/WalletForm';
 import { useAppData } from '@/lib/data';
-import { fmtDate, fmtVND, monthISO, tax88 } from '@/lib/utils';
+import { fmtDate, fmtVND, monthISO } from '@/lib/utils';
 import { WALLET_TYPE_LABELS } from '@/lib/types';
 import type { TxType, Wallet } from '@/lib/types';
 
@@ -54,7 +54,6 @@ export default function Dashboard() {
   const expense = monthTxs.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
   const totalBalance = wallets.reduce((s, w) => s + w.balance, 0);
   const netCashflow = income - expense;
-  const tax = tax88(income);
   const today = new Date().toISOString().slice(0, 10);
   const budgets = useMemo(
     () => (state?.budgets ?? []).filter((b) => b.workspace_id === wsId && b.month === month),

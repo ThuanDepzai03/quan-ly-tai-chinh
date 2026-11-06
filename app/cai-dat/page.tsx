@@ -6,8 +6,8 @@ import { useAppData } from '@/lib/data';
 import { getSessionUser, localChangePassword, localDeleteAccount, localRename, setSessionUser, setPin, removePin } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/client';
 import { fmtVND, monthISO } from '@/lib/utils';
-import { TAX_CIRCULAR_LABELS, WORKSPACE_MODE_LABELS } from '@/lib/types';
-import type { MemberRole, TaxCircular, WorkspaceMode } from '@/lib/types';
+import { TAX_CALCULATION_METHOD_LABELS, TAX_CIRCULAR_LABELS, WORKSPACE_MODE_LABELS } from '@/lib/types';
+import type { MemberRole, TaxCalculationMethod, TaxCircular, WorkspaceMode } from '@/lib/types';
 
 const ROLE_LABELS: Record<MemberRole, string> = {
   owner: 'Chủ sở hữu', admin: 'Quản trị', member: 'Thành viên', viewer: 'Chỉ xem',
@@ -204,13 +204,14 @@ export default function CaiDat() {
             e.preventDefault();
             data.updateTaxSettings({
               tax_circular: currentWorkspace.tax_circular,
+              tax_method: currentWorkspace.tax_method ?? 'turnover_tncn',
               vat_rate: currentWorkspace.vat_rate, tncn_rate: currentWorkspace.tncn_rate,
               tndn_rate: currentWorkspace.tndn_rate, mon_bai: currentWorkspace.mon_bai,
               tncn_deduction: currentWorkspace.tncn_deduction ?? 11000000,
             });
             setMsg('Đã lưu cài đặt thuế (ghi lên Supabase).');
           }}>
-            <Field label="Thông tư áp dụng">
+            <Field label="Chế độ kế toán / thông tư tham chiếu">
               <select value={currentWorkspace.tax_circular} onChange={(e) => {
                 data.updateTaxSettings({ tax_circular: e.target.value as TaxCircular });
               }}>
@@ -219,18 +220,27 @@ export default function CaiDat() {
                 ))}
               </select>
             </Field>
+            <Field label="Phương pháp ước tính thuế thu nhập">
+              <select value={currentWorkspace.tax_method ?? 'turnover_tncn'} onChange={(e) => {
+                data.updateTaxSettings({ tax_method: e.target.value as TaxCalculationMethod });
+              }}>
+                {(Object.keys(TAX_CALCULATION_METHOD_LABELS) as TaxCalculationMethod[]).map((method) => (
+                  <option key={method} value={method}>{TAX_CALCULATION_METHOD_LABELS[method]}</option>
+                ))}
+              </select>
+            </Field>
             <div className="form-row">
               <Field label="Thuế suất VAT khoán">
                 <input type="number" step="0.001" min={0} max={1} value={currentWorkspace.vat_rate}
                   onChange={(e) => data.updateTaxSettings({ vat_rate: Number(e.target.value) || 0 })} />
               </Field>
-              <Field label="Thuế suất TNCN khoán">
+              <Field label="Thuế suất TNCN theo doanh thu">
                 <input type="number" step="0.001" min={0} max={1} value={currentWorkspace.tncn_rate}
                   onChange={(e) => data.updateTaxSettings({ tncn_rate: Number(e.target.value) || 0 })} />
               </Field>
             </div>
             <div className="form-row">
-              <Field label="Thuế suất TNDN">
+              <Field label="Thuế suất TNDN theo lãi ghi nhận">
                 <input type="number" step="0.01" min={0} max={1} value={currentWorkspace.tndn_rate}
                   onChange={(e) => data.updateTaxSettings({ tndn_rate: Number(e.target.value) || 0 })} />
               </Field>
@@ -244,7 +254,9 @@ export default function CaiDat() {
                 onChange={(e) => data.updateTaxSettings({ tncn_deduction: Number(e.target.value) || 0 })} />
             </Field>
             <button type="submit">Lưu cài đặt thuế</button>
-            <p className="muted" style={{ fontSize: 13 }}>Thay đổi ở đây áp dụng ngay cho trang Thuế và Báo cáo.</p>
+            <p className="muted" style={{ fontSize: 13 }}>
+              Chọn thông tư không tự đổi thuế suất. Phương pháp và các tỷ lệ ở đây cấu hình độc lập, áp dụng ngay cho Thuế và Báo cáo dưới dạng ước tính. Mẫu Excel S1–S7 hiện chỉ hỗ trợ hộ kinh doanh TT88.
+            </p>
           </form>
         </GlassCard>
       ) : null}
@@ -406,7 +418,7 @@ export default function CaiDat() {
                 ))}
               </select>
             </Field>
-            <Field label="Thông tư thuế mặc định">
+            <Field label="Chế độ kế toán / thông tư tham chiếu">
               <select value={wsCircular} onChange={(e) => setWsCircular(e.target.value as TaxCircular)}>
                 {(Object.keys(TAX_CIRCULAR_LABELS) as TaxCircular[]).map((c) => (
                   <option key={c} value={c}>{TAX_CIRCULAR_LABELS[c]}</option>

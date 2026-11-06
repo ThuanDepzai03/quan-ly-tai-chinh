@@ -136,7 +136,8 @@ export function seedDemoState(user: AppUser): AppState {
     user,
     workspaces: [{
       id: wsId, owner_id: user.id, name: 'Hộ kinh doanh mẫu', mode: 'household',
-      tax_circular: 'TT88/2021', vat_rate: 0.01, tncn_rate: 0.005, tndn_rate: 0.2,
+      tax_circular: 'TT88/2021', tax_method: 'turnover_tncn',
+      vat_rate: 0.01, tncn_rate: 0.005, tndn_rate: 0.2,
       mon_bai: 1000000, tncn_deduction: 11000000, created_at: now,
     }],
     currentWorkspaceId: wsId,
@@ -204,7 +205,8 @@ export function emptyState(user: AppUser): AppState {
     user,
     workspaces: [{
       id: wsId, owner_id: user.id, name: 'Không gian của tôi', mode: 'personal',
-      tax_circular: 'TT88/2021', vat_rate: 0.01, tncn_rate: 0.005, tndn_rate: 0.2,
+      tax_circular: 'TT88/2021', tax_method: 'turnover_tncn',
+      vat_rate: 0.01, tncn_rate: 0.005, tndn_rate: 0.2,
       mon_bai: 1000000, tncn_deduction: 11000000, created_at: new Date().toISOString(),
     }],
     currentWorkspaceId: wsId,

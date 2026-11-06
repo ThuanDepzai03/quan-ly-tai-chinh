@@ -1,6 +1,6 @@
 # Quản lý tài chính — Source code đầy đủ (v2.1)
 
-Web + APK + iOS • Cá nhân / Hộ kinh doanh–Gia đình / Team–DN nhỏ • TT88/2021 • Kho hàng tính lãi • iOS 27 Liquid Glass (dark mode)
+Web + APK + iOS • Cá nhân / Hộ kinh doanh–Gia đình / Team–DN nhỏ • Chế độ kế toán tách biệt phương pháp ước tính thuế • Kho hàng tính lãi • iOS 27 Liquid Glass (dark mode)
 
 Bản v2 viết lại đầy đủ từng trang, không còn stub: Dashboard, Kho hàng, Thuế, Báo cáo (xuất CSV/Excel thật), Cài đặt, Auth. Kiểm tra bằng `npm run typecheck` (tsc --noEmit) phải ra 0 lỗi.
 
@@ -47,7 +47,7 @@ Vercel > Add New Project > Import repo GitHub > Framework: Next.js > Environment
 - `SUPABASE_SERVICE_ROLE_KEY` (server-only)
 Deploy → domain `https://quanlytaichinh.vercel.app` (tên có thể khác nếu đã có người dùng, lấy đúng domain Vercel cấp).
 
-Test nhanh: đăng ký 1 tài khoản → tạo workspace → bán 5 ốp lưng iPhone 15 (Đen) → kiểm tra doanh thu 445.000đ, lãi 270.000đ ở trang Kho hàng / Báo cáo; tạo giao dịch bán 10.000.000đ → kiểm tra VAT 100.000đ (1%) + TNCN 50.000đ (0,5%) ở trang Thuế.
+Test nhanh: đăng ký 1 tài khoản → tạo workspace → bán 5 ốp lưng iPhone 15 (Đen) → kiểm tra doanh thu 445.000đ, lãi 270.000đ ở trang Kho hàng / Báo cáo. Trang Thuế ước tính VAT và phương pháp thuế thu nhập riêng theo cấu hình workspace; các số mặc định chỉ là tham khảo, cần đối chiếu cơ quan thuế.
 
 ## 4. Build APK (Android) / iOS
 ```bash
@@ -67,7 +67,7 @@ app/
   auth/page.tsx       Đăng ký / Đăng nhập / Quên mật khẩu (Supabase Auth, fallback local)
   dashboard/page.tsx  Tổng quan: số dư, thu/chi tháng, lãi, thuế, ví, giao dịch, ngân sách, mục tiêu, nợ, nhắc nhở
   kho/page.tsx        Kho hàng: tìm/lọc, thêm/sửa/xóa sản phẩm, biến thể + IMEI, nhập kho, bán hàng tính lãi
-  thue/page.tsx       Thuế TT88/2021: VAT 1% + TNCN 0,5% + môn bài, TNCN lũy tiến, TNDN, sổ nộp thuế, 7 sổ S1–S7-HKD
+  thue/page.tsx       Ước tính VAT + phương pháp thuế thu nhập cấu hình riêng; theo dõi sổ nộp thuế và mẫu sổ TT88 S1–S7-HKD
   bao-cao/page.tsx    Báo cáo theo tháng: lãi theo sản phẩm, thu/chi theo danh mục, theo tháng, xuất CSV + Excel thật
   cai-dat/page.tsx    Không gian Thêm/Sửa/Xóa, cài đặt thuế, danh mục, ngân sách, tài khoản, PIN, xóa dữ liệu mẫu
 components/

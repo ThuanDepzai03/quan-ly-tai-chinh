@@ -1,3 +1,5 @@
+import type { TaxCalculationMethod } from './types';
+
 export const fmtVND = (n: number): string =>
   new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(Math.round(n));
 
@@ -33,6 +35,47 @@ export const calcTNCNProgressive = (taxableIncome: number): number => {
 /** TNDN = lợi nhuận trước thuế × thuế suất (mặc định 20%). */
 export const calcTNDN = (profitBeforeTax: number, rate = 0.2): number =>
   Math.round(Math.max(0, profitBeforeTax) * rate);
+
+export function estimateWorkspaceTax(input: {
+  method: TaxCalculationMethod;
+  revenue: number;
+  recordedProfit: number;
+  vatRate: number;
+  tncnRate: number;
+  tndnRate: number;
+  monthlyDeduction: number;
+  periodMonths?: number;
+}) {
+  const vat = Math.round(Math.max(0, input.revenue) * input.vatRate);
+  const periodMonths = Math.max(1, input.periodMonths ?? 1);
+  let incomeTax: number;
+  let incomeTaxLabel: string;
+  let incomeTaxFormula: string;
+
+  if (input.method === 'profit_tndn') {
+    incomeTax = calcTNDN(input.recordedProfit, input.tndnRate);
+    incomeTaxLabel = 'TNDN theo lãi ghi nhận';
+    incomeTaxFormula = `Lãi ghi nhận × ${(input.tndnRate * 100).toLocaleString('vi-VN')}%`;
+  } else if (input.method === 'progressive_tncn') {
+    const monthlyRevenue = Math.max(0, input.revenue) / periodMonths;
+    const monthlyTaxable = Math.max(0, monthlyRevenue - input.monthlyDeduction);
+    incomeTax = calcTNCNProgressive(monthlyTaxable) * periodMonths;
+    incomeTaxLabel = 'TNCN lũy tiến (ước tính)';
+    incomeTaxFormula = `Tính từng tháng trên max(0, doanh thu tháng − ${fmtVND(input.monthlyDeduction)})`;
+  } else {
+    incomeTax = Math.round(Math.max(0, input.revenue) * input.tncnRate);
+    incomeTaxLabel = 'TNCN theo tỷ lệ doanh thu';
+    incomeTaxFormula = `Doanh thu × ${(input.tncnRate * 100).toLocaleString('vi-VN')}%`;
+  }
+
+  return {
+    vat,
+    incomeTax,
+    incomeTaxLabel,
+    incomeTaxFormula,
+    total: vat + incomeTax,
+  };
+}
 
 /** Thuế môn bài theo bậc doanh thu năm (mẫu TT88 — đối chiếu thông báo cơ quan thuế). */
 export const monBaiByRevenue = (yearRevenue: number): number => {

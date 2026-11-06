@@ -3,16 +3,22 @@
 // không chứa hàm tính toán (xem lib/utils.ts).
 export type WorkspaceMode = 'personal' | 'household' | 'team';
 export type TaxCircular = 'TT88/2021' | 'TT133/2016' | 'TT200/2014' | 'TNCN';
+export type TaxCalculationMethod = 'turnover_tncn' | 'profit_tndn' | 'progressive_tncn';
 export type WalletType = 'cash' | 'bank' | 'e-wallet' | 'credit' | 'savings' | 'other';
 export type TxType = 'income' | 'expense' | 'transfer';
 export type DebtKind = 'borrow' | 'lend';
 export type MemberRole = 'owner' | 'admin' | 'member' | 'viewer';
 export type FieldType = 'text' | 'number' | 'date' | 'select' | 'boolean';
 export type TaxKind = 'VAT' | 'TNCN' | 'TNDN' | 'mon_bai';
+export const TAX_CALCULATION_METHOD_LABELS: Record<TaxCalculationMethod, string> = {
+  turnover_tncn: 'TNCN theo tỷ lệ doanh thu',
+  profit_tndn: 'TNDN theo lãi ghi nhận',
+  progressive_tncn: 'TNCN lũy tiến (ước tính)',
+};
 
 export interface Workspace {
   id: string; owner_id: string; name: string; mode: WorkspaceMode;
-  tax_circular: TaxCircular; vat_rate: number; tncn_rate: number;
+  tax_circular: TaxCircular; tax_method?: TaxCalculationMethod; vat_rate: number; tncn_rate: number;
   tndn_rate: number; mon_bai: number; tncn_deduction?: number; created_at: string;
 }
 export interface Member {
