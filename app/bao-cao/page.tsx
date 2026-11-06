@@ -6,7 +6,8 @@ import { useAppData } from '@/lib/data';
 import {
   downloadCSV, downloadXLSX, estimateWorkspaceTax, fmtDate, fmtVND, groupByMonth, monthISO,
 } from '@/lib/utils';
-import { TAX_CALCULATION_METHOD_LABELS } from '@/lib/types';
+import { BUSINESS_TYPE_LABELS, TAX_CALCULATION_METHOD_LABELS } from '@/lib/types';
+import { defaultTaxMethod, inferBusinessType, TAX_RULES_2026 } from '@/lib/tax-config';
 
 type ChartPeriod = 'week' | 'month' | 'year-month' | 'year-day';
 type ChartMetricKey = 'income' | 'expense' | 'salesProfit' | 'net' | 'transfer';
@@ -252,16 +253,22 @@ export default function BaoCao() {
   const income = txs.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0);
   const expense = txs.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
   const profit = txs.reduce((s, t) => s + (t.profit ?? 0), 0);
-  const taxMethod = currentWorkspace?.tax_method ?? 'turnover_tncn';
+  const businessType = currentWorkspace?.business_type
+    ?? (currentWorkspace ? inferBusinessType(currentWorkspace.mode) : 'household_business');
+  const businessSector = currentWorkspace?.business_sector ?? 'goods';
+  const annualRevenue = allTxs.filter((t) => t.type === 'income' && t.date.startsWith(String(new Date().getFullYear())))
+    .reduce((sum, t) => sum + t.amount, 0);
+  const taxMethod = defaultTaxMethod(businessType, annualRevenue);
   const tax = estimateWorkspaceTax({
+    businessType,
+    businessSector,
     method: taxMethod,
     revenue: income,
-    recordedProfit: profit,
-    vatRate: currentWorkspace?.vat_rate ?? 0.01,
-    tncnRate: currentWorkspace?.tncn_rate ?? 0.005,
-    tndnRate: currentWorkspace?.tndn_rate ?? 0.2,
-    monthlyDeduction: currentWorkspace?.tncn_deduction ?? 11000000,
+    annualRevenue,
+    vatRate: currentWorkspace?.vat_rate ?? TAX_RULES_2026.enterprise.defaultVatRate,
+    monthlyDeduction: currentWorkspace?.tncn_deduction ?? TAX_RULES_2026.personalIncome.monthlyDeduction,
   });
+  const fmtTaxAmount = (value: number | null) => value === null ? 'Chưa đủ dữ liệu' : fmtVND(value);
 
   const byProduct = useMemo(() => {
     const map = new Map<string, { name: string; qty: number; revenue: number; cost: number; profit: number }>();
@@ -326,8 +333,10 @@ export default function BaoCao() {
       { name: 'Tong hop', rows: [{
         'Tháng': month, 'Tổng thu': income, 'Tổng chi': expense, 'Lãi bán hàng': profit,
         'Thông tư kế toán': currentWorkspace?.tax_circular ?? 'TT88/2021',
+        'Loại hình chủ thể': BUSINESS_TYPE_LABELS[businessType],
         'Phương pháp thuế thu nhập': TAX_CALCULATION_METHOD_LABELS[taxMethod],
-        'VAT ước tính': tax.vat, [tax.incomeTaxLabel]: tax.incomeTax, 'Tổng thuế ước tính': tax.total,
+        'VAT ước tính': tax.vat, 'TNCN ước tính': tax.tncn,
+        'TNDN ước tính': tax.tndn, 'Tổng thuế ước tính': tax.total,
       }] },
       { name: 'Giao dich', rows: txRows() },
       {
@@ -366,7 +375,7 @@ export default function BaoCao() {
           <StatCard label={`Tổng thu tháng ${month}`} value={fmtVND(income)} sub={`${txs.filter((t) => t.type === 'income').length} giao dịch thu`} />
           <StatCard label={`Tổng chi tháng ${month}`} value={fmtVND(expense)} sub={`${txs.filter((t) => t.type === 'expense').length} giao dịch chi`} />
           <StatCard label="Lãi bán hàng" value={fmtVND(profit)} sub="Doanh thu − Giá vốn" />
-          <StatCard label={`Thuế ước tính · ${TAX_CALCULATION_METHOD_LABELS[taxMethod]}`} value={fmtVND(tax.total)} sub={`VAT ${fmtVND(tax.vat)} + ${tax.incomeTaxLabel}: ${fmtVND(tax.incomeTax)}`} />
+          <StatCard label={`Thuế ước tính · ${TAX_CALCULATION_METHOD_LABELS[tax.method]}`} value={fmtTaxAmount(tax.total)} sub={`${tax.incomeTaxLabel}: ${fmtTaxAmount(tax.incomeTax)}. Lợi nhuận tính thuế cần nhập tại mục Thuế.`} />
         </div>
       </GlassCard>
 

@@ -136,9 +136,10 @@ export function seedDemoState(user: AppUser): AppState {
     user,
     workspaces: [{
       id: wsId, owner_id: user.id, name: 'Hộ kinh doanh mẫu', mode: 'household',
-      tax_circular: 'TT88/2021', tax_method: 'turnover_tncn',
-      vat_rate: 0.01, tncn_rate: 0.005, tndn_rate: 0.2,
-      mon_bai: 1000000, tncn_deduction: 11000000, created_at: now,
+      business_type: 'household_business', business_sector: 'goods',
+      tax_circular: 'TT152/2025', tax_method: 'business_revenue',
+      vat_rate: 0.1, tncn_rate: 0, tndn_rate: 0.2,
+      tncn_deduction: 15500000, created_at: now,
     }],
     currentWorkspaceId: wsId,
     members: [{ id: uid(), workspace_id: wsId, user_id: user.id, role: 'owner', email: user.email, name: user.name }],
@@ -158,7 +159,7 @@ export function seedDemoState(user: AppUser): AppState {
       { id: uid(), workspace_id: wsId, name: 'Nợ nhà cung cấp An Phát', kind: 'borrow', amount: 4200000, paid: 0, due_date: '2026-11-30' },
     ],
     reminders: [
-      { id: uid(), workspace_id: wsId, title: 'Nộp thuế khoán quý 4', amount: 1695000, next_date: '2026-12-30', frequency: 'quarterly' },
+      { id: uid(), workspace_id: wsId, title: 'Đối soát nghĩa vụ thuế quý 4', next_date: '2026-12-30', frequency: 'quarterly' },
       { id: uid(), workspace_id: wsId, title: 'Thuê mặt bằng tháng 12', amount: 8000000, next_date: '2026-12-01', frequency: 'monthly' },
     ],
     products, productCategories, productVariants: variants,
@@ -190,9 +191,8 @@ export function seedDemoState(user: AppUser): AppState {
       { id: uid(), workspace_id: wsId, product_id: prodByName('iPhone 15 128GB'), variant_id: variants[3].id, kind: 'out', quantity: 1, imei: null, note: 'Bán iPhone 15 128GB', created_at: '2026-08-05T08:00:00.000Z' },
     ],
     taxPayments: [
-      { id: uid(), workspace_id: wsId, tax_type: 'VAT', period: 'Q3/2026', amount: 1220000, paid: true, due_date: '2026-10-30', note: 'Thuế khoán quý 3' },
-      { id: uid(), workspace_id: wsId, tax_type: 'TNCN', period: 'Q3/2026', amount: 610000, paid: true, due_date: '2026-10-30', note: 'Thuế khoán quý 3' },
-      { id: uid(), workspace_id: wsId, tax_type: 'mon_bai', period: '2026', amount: 1000000, paid: true, due_date: '2026-01-30', note: 'Lệ phí môn bài năm 2026' },
+      { id: uid(), workspace_id: wsId, tax_type: 'VAT', period: 'Q3/2026', amount: 1220000, paid: true, due_date: '2026-10-30', note: 'Khoản thuế đã ghi nhận' },
+      { id: uid(), workspace_id: wsId, tax_type: 'TNCN', period: 'Q3/2026', amount: 610000, paid: true, due_date: '2026-10-30', note: 'Khoản thuế đã ghi nhận' },
       { id: uid(), workspace_id: wsId, tax_type: 'VAT', period: 'Q4/2026', amount: 695000, paid: false, due_date: '2027-01-30', note: 'Ước tính từ doanh thu 69,5tr' },
     ],
   };
@@ -205,9 +205,10 @@ export function emptyState(user: AppUser): AppState {
     user,
     workspaces: [{
       id: wsId, owner_id: user.id, name: 'Không gian của tôi', mode: 'personal',
-      tax_circular: 'TT88/2021', tax_method: 'turnover_tncn',
-      vat_rate: 0.01, tncn_rate: 0.005, tndn_rate: 0.2,
-      mon_bai: 1000000, tncn_deduction: 11000000, created_at: new Date().toISOString(),
+      business_type: 'individual', business_sector: 'other',
+      tax_circular: 'none', tax_method: 'employment_income',
+      vat_rate: 0.1, tncn_rate: 0, tndn_rate: 0.2,
+      tncn_deduction: 15500000, created_at: new Date().toISOString(),
     }],
     currentWorkspaceId: wsId,
     members: [{ id: uid(), workspace_id: wsId, user_id: user.id, role: 'owner', email: user.email, name: user.name }],

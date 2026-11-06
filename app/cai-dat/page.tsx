@@ -6,8 +6,9 @@ import { useAppData } from '@/lib/data';
 import { getSessionUser, localChangePassword, localDeleteAccount, localRename, setSessionUser, setPin, removePin } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/client';
 import { fmtVND, monthISO } from '@/lib/utils';
-import { TAX_CALCULATION_METHOD_LABELS, TAX_CIRCULAR_LABELS, WORKSPACE_MODE_LABELS } from '@/lib/types';
-import type { MemberRole, TaxCalculationMethod, TaxCircular, WorkspaceMode } from '@/lib/types';
+import { ACCOUNTING_REGIMES, BUSINESS_SECTOR_LABELS, BUSINESS_TYPE_LABELS, TAX_CALCULATION_METHOD_LABELS, TAX_CIRCULAR_LABELS, WORKSPACE_MODE_LABELS } from '@/lib/types';
+import type { BusinessSector, BusinessType, MemberRole, TaxCircular, WorkspaceMode } from '@/lib/types';
+import { defaultTaxMethod, inferBusinessType, taxMethodOptions, TAX_RULES_2026 } from '@/lib/tax-config';
 
 const ROLE_LABELS: Record<MemberRole, string> = {
   owner: 'Chủ sở hữu', admin: 'Quản trị', member: 'Thành viên', viewer: 'Chỉ xem',
@@ -18,12 +19,11 @@ export default function CaiDat() {
   const { state, currentWorkspace } = data;
   const [wsName, setWsName] = useState('');
   const [wsMode, setWsMode] = useState<WorkspaceMode>('household');
-  const [wsCircular, setWsCircular] = useState<TaxCircular>('TT88/2021');
-  const [wsVat, setWsVat] = useState('0.01');
-  const [wsTncn, setWsTncn] = useState('0.005');
-  const [wsTndn, setWsTndn] = useState('0.2');
-  const [wsMonBai, setWsMonBai] = useState('1000000');
-  const [wsDeduction, setWsDeduction] = useState('11000000');
+  const [wsBusinessType, setWsBusinessType] = useState<BusinessType>('household_business');
+  const [wsBusinessSector, setWsBusinessSector] = useState<BusinessSector>('goods');
+  const [wsCircular, setWsCircular] = useState<TaxCircular>('TT152/2025');
+  const [wsVat, setWsVat] = useState('0.1');
+  const [wsDeduction, setWsDeduction] = useState(String(TAX_RULES_2026.personalIncome.monthlyDeduction));
   const [showWsForm, setShowWsForm] = useState(false);
   const [savingWorkspace, setSavingWorkspace] = useState(false);
   const [editingWsId, setEditingWsId] = useState<string | null>(null);
@@ -48,21 +48,31 @@ export default function CaiDat() {
   const members = (state?.members ?? []).filter((m) => m.workspace_id === wsId);
   const monthBudgets = (state?.budgets ?? []).filter((b) => b.workspace_id === wsId && b.month === monthISO());
   const month = monthISO();
+  const annualRevenue = (state?.transactions ?? [])
+    .filter((tx) => tx.workspace_id === wsId && tx.type === 'income' && tx.date.startsWith(String(new Date().getFullYear())))
+    .reduce((sum, tx) => sum + tx.amount, 0);
+  const activeBusinessType = currentWorkspace?.business_type
+    ?? (currentWorkspace ? inferBusinessType(currentWorkspace.mode) : 'household_business');
+  const activeTaxMethods = taxMethodOptions(activeBusinessType, annualRevenue);
+  const activeTaxMethod = currentWorkspace?.tax_method && activeTaxMethods.includes(currentWorkspace.tax_method)
+    ? currentWorkspace.tax_method
+    : defaultTaxMethod(activeBusinessType, annualRevenue);
 
   function openWsForm(editId?: string) {
     if (editId && currentWorkspace) {
       setEditingWsId(editId);
       setWsName(currentWorkspace.name);
       setWsMode(currentWorkspace.mode);
+      setWsBusinessType(currentWorkspace.business_type ?? inferBusinessType(currentWorkspace.mode));
+      setWsBusinessSector(currentWorkspace.business_sector ?? 'goods');
       setWsCircular(currentWorkspace.tax_circular);
       setWsVat(String(currentWorkspace.vat_rate));
-      setWsTncn(String(currentWorkspace.tncn_rate));
-      setWsTndn(String(currentWorkspace.tndn_rate));
-      setWsMonBai(String(currentWorkspace.mon_bai));
-      setWsDeduction(String(currentWorkspace.tncn_deduction ?? 11000000));
+      setWsDeduction(String(currentWorkspace.tncn_deduction ?? TAX_RULES_2026.personalIncome.monthlyDeduction));
     } else {
-      setEditingWsId(null); setWsName(''); setWsMode('household'); setWsCircular('TT88/2021');
-      setWsVat('0.01'); setWsTncn('0.005'); setWsTndn('0.2'); setWsMonBai('1000000'); setWsDeduction('11000000');
+      setEditingWsId(null); setWsName(''); setWsMode('household');
+      setWsBusinessType('household_business'); setWsBusinessSector('goods');
+      setWsCircular('TT152/2025'); setWsVat('0.1');
+      setWsDeduction(String(TAX_RULES_2026.personalIncome.monthlyDeduction));
     }
     setShowWsForm(true);
   }
@@ -73,9 +83,10 @@ export default function CaiDat() {
     setSavingWorkspace(true);
     try {
       const error = await data.saveWorkspace({
-        id: editingWsId ?? undefined, name: wsName.trim(), mode: wsMode, tax_circular: wsCircular,
-        vat_rate: Number(wsVat) || 0, tncn_rate: Number(wsTncn) || 0,
-        tndn_rate: Number(wsTndn) || 0, mon_bai: Number(wsMonBai) || 0,
+        id: editingWsId ?? undefined, name: wsName.trim(), mode: wsMode,
+        business_type: wsBusinessType, business_sector: wsBusinessSector, tax_circular: wsCircular,
+        vat_rate: Number(wsVat) || 0.1, tncn_rate: 0,
+        tndn_rate: 0.2,
         tncn_deduction: Number(wsDeduction) || 0,
       });
       if (error) { setMsg(error); return; }
@@ -178,7 +189,7 @@ export default function CaiDat() {
             <div key={w.id} className="row-item">
               <div>
                 <b>{w.name}</b>{w.id === wsId ? ' ★' : ''}
-                <div className="sub">{WORKSPACE_MODE_LABELS[w.mode]} • {TAX_CIRCULAR_LABELS[w.tax_circular]}</div>
+                <div className="sub">{WORKSPACE_MODE_LABELS[w.mode]} • {BUSINESS_TYPE_LABELS[w.business_type ?? inferBusinessType(w.mode)]} • {TAX_CIRCULAR_LABELS[w.tax_circular]}</div>
               </div>
               <div style={{ display: 'flex', gap: 6 }}>
                 {w.id !== wsId ? (
@@ -204,58 +215,72 @@ export default function CaiDat() {
             e.preventDefault();
             data.updateTaxSettings({
               tax_circular: currentWorkspace.tax_circular,
-              tax_method: currentWorkspace.tax_method ?? 'turnover_tncn',
-              vat_rate: currentWorkspace.vat_rate, tncn_rate: currentWorkspace.tncn_rate,
-              tndn_rate: currentWorkspace.tndn_rate, mon_bai: currentWorkspace.mon_bai,
-              tncn_deduction: currentWorkspace.tncn_deduction ?? 11000000,
+              business_type: activeBusinessType,
+              business_sector: currentWorkspace.business_sector ?? 'goods',
+              tax_method: activeTaxMethod,
+              vat_rate: currentWorkspace.vat_rate,
+              tncn_deduction: currentWorkspace.tncn_deduction ?? TAX_RULES_2026.personalIncome.monthlyDeduction,
             });
             setMsg('Đã lưu cài đặt thuế (ghi lên Supabase).');
           }}>
+            <Field label="Loại hình chủ thể tính thuế">
+              <select value={activeBusinessType} onChange={(e) => {
+                const businessType = e.target.value as BusinessType;
+                const businessSector = businessType === 'household_business' ? 'goods' : 'other';
+                data.updateTaxSettings({
+                  business_type: businessType,
+                  business_sector: businessSector,
+                  tax_method: defaultTaxMethod(businessType, annualRevenue),
+                  ...(businessType === 'enterprise' && currentWorkspace.vat_rate === 0.01 ? { vat_rate: 0.1 } : {}),
+                });
+              }}>
+                {(Object.keys(BUSINESS_TYPE_LABELS) as BusinessType[]).map((type) => (
+                  <option key={type} value={type}>{BUSINESS_TYPE_LABELS[type]}</option>
+                ))}
+              </select>
+            </Field>
+            {activeBusinessType === 'household_business' ? (
+              <Field label="Nhóm hoạt động kinh doanh">
+                <select value={currentWorkspace.business_sector ?? 'goods'} onChange={(e) => {
+                  data.updateTaxSettings({ business_sector: e.target.value as BusinessSector });
+                }}>
+                  {(Object.keys(BUSINESS_SECTOR_LABELS) as BusinessSector[]).map((sector) => (
+                    <option key={sector} value={sector}>{BUSINESS_SECTOR_LABELS[sector]}</option>
+                  ))}
+                </select>
+              </Field>
+            ) : null}
             <Field label="Chế độ kế toán / thông tư tham chiếu">
               <select value={currentWorkspace.tax_circular} onChange={(e) => {
                 data.updateTaxSettings({ tax_circular: e.target.value as TaxCircular });
               }}>
-                {(Object.keys(TAX_CIRCULAR_LABELS) as TaxCircular[]).map((c) => (
+                {ACCOUNTING_REGIMES.map((c) => (
                   <option key={c} value={c}>{TAX_CIRCULAR_LABELS[c]}</option>
                 ))}
               </select>
             </Field>
-            <Field label="Phương pháp ước tính thuế thu nhập">
-              <select value={currentWorkspace.tax_method ?? 'turnover_tncn'} onChange={(e) => {
-                data.updateTaxSettings({ tax_method: e.target.value as TaxCalculationMethod });
-              }}>
-                {(Object.keys(TAX_CALCULATION_METHOD_LABELS) as TaxCalculationMethod[]).map((method) => (
+            <Field label="Phương pháp ước tính thuế thu nhập (tự xác định theo chủ thể/ngưỡng)">
+              <select value={activeTaxMethod} disabled>
+                {activeTaxMethods.map((method) => (
                   <option key={method} value={method}>{TAX_CALCULATION_METHOD_LABELS[method]}</option>
                 ))}
               </select>
             </Field>
-            <div className="form-row">
-              <Field label="Thuế suất VAT khoán">
-                <input type="number" step="0.001" min={0} max={1} value={currentWorkspace.vat_rate}
+            {activeBusinessType === 'enterprise' ? (
+              <Field label="Tỷ lệ VAT đầu ra ước tính (theo nhóm hàng/dịch vụ)">
+                <input type="number" step="0.01" min={0} max={1} value={currentWorkspace.vat_rate}
                   onChange={(e) => data.updateTaxSettings({ vat_rate: Number(e.target.value) || 0 })} />
               </Field>
-              <Field label="Thuế suất TNCN theo doanh thu">
-                <input type="number" step="0.001" min={0} max={1} value={currentWorkspace.tncn_rate}
-                  onChange={(e) => data.updateTaxSettings({ tncn_rate: Number(e.target.value) || 0 })} />
+            ) : null}
+            {activeBusinessType === 'individual' ? (
+              <Field label="Giảm trừ bản thân TNCN (đ/tháng)">
+                <input type="number" min={0} value={currentWorkspace.tncn_deduction ?? TAX_RULES_2026.personalIncome.monthlyDeduction}
+                  onChange={(e) => data.updateTaxSettings({ tncn_deduction: Number(e.target.value) || 0 })} />
               </Field>
-            </div>
-            <div className="form-row">
-              <Field label="Thuế suất TNDN theo lãi ghi nhận">
-                <input type="number" step="0.01" min={0} max={1} value={currentWorkspace.tndn_rate}
-                  onChange={(e) => data.updateTaxSettings({ tndn_rate: Number(e.target.value) || 0 })} />
-              </Field>
-              <Field label="Môn bài / năm (đ)">
-                <input type="number" min={0} value={currentWorkspace.mon_bai}
-                  onChange={(e) => data.updateTaxSettings({ mon_bai: Number(e.target.value) || 0 })} />
-              </Field>
-            </div>
-            <Field label="Giảm trừ gia cảnh TNCN (đ/tháng)">
-              <input type="number" min={0} value={currentWorkspace.tncn_deduction ?? 11000000}
-                onChange={(e) => data.updateTaxSettings({ tncn_deduction: Number(e.target.value) || 0 })} />
-            </Field>
+            ) : null}
             <button type="submit">Lưu cài đặt thuế</button>
             <p className="muted" style={{ fontSize: 13 }}>
-              Chọn thông tư không tự đổi thuế suất. Phương pháp và các tỷ lệ ở đây cấu hình độc lập, áp dụng ngay cho Thuế và Báo cáo dưới dạng ước tính. Mẫu Excel S1–S7 hiện chỉ hỗ trợ hộ kinh doanh TT88.
+              Loại hình chủ thể độc lập với chế độ kế toán. Thuế hộ kinh doanh áp dụng tỷ lệ theo nhóm ngành và ngưỡng doanh thu; doanh nghiệp áp dụng TNDN theo lợi nhuận tính thuế, không lấy doanh thu thay lợi nhuận. Quy tắc tham chiếu được tách tại cấu hình thuế 2026.
             </p>
           </form>
         </GlassCard>
@@ -418,32 +443,44 @@ export default function CaiDat() {
                 ))}
               </select>
             </Field>
+            <Field label="Loại hình chủ thể tính thuế">
+              <select value={wsBusinessType} onChange={(e) => {
+                const businessType = e.target.value as BusinessType;
+                setWsBusinessType(businessType);
+                setWsBusinessSector(businessType === 'household_business' ? 'goods' : 'other');
+                if (businessType === 'enterprise') setWsVat('0.1');
+              }}>
+                {(Object.keys(BUSINESS_TYPE_LABELS) as BusinessType[]).map((type) => (
+                  <option key={type} value={type}>{BUSINESS_TYPE_LABELS[type]}</option>
+                ))}
+              </select>
+            </Field>
+            {wsBusinessType === 'household_business' ? (
+              <Field label="Nhóm hoạt động kinh doanh">
+                <select value={wsBusinessSector} onChange={(e) => setWsBusinessSector(e.target.value as BusinessSector)}>
+                  {(Object.keys(BUSINESS_SECTOR_LABELS) as BusinessSector[]).map((sector) => (
+                    <option key={sector} value={sector}>{BUSINESS_SECTOR_LABELS[sector]}</option>
+                  ))}
+                </select>
+              </Field>
+            ) : null}
             <Field label="Chế độ kế toán / thông tư tham chiếu">
               <select value={wsCircular} onChange={(e) => setWsCircular(e.target.value as TaxCircular)}>
-                {(Object.keys(TAX_CIRCULAR_LABELS) as TaxCircular[]).map((c) => (
+                {ACCOUNTING_REGIMES.map((c) => (
                   <option key={c} value={c}>{TAX_CIRCULAR_LABELS[c]}</option>
                 ))}
               </select>
             </Field>
-            <div className="form-row">
-              <Field label="VAT khoán">
-                <input type="number" step="0.001" min={0} max={1} value={wsVat} onChange={(e) => setWsVat(e.target.value)} />
+            {wsBusinessType === 'enterprise' ? (
+              <Field label="Tỷ lệ VAT đầu ra ước tính (theo nhóm hàng/dịch vụ)">
+                <input type="number" step="0.01" min={0} max={1} value={wsVat} onChange={(e) => setWsVat(e.target.value)} />
               </Field>
-              <Field label="TNCN khoán">
-                <input type="number" step="0.001" min={0} max={1} value={wsTncn} onChange={(e) => setWsTncn(e.target.value)} />
+            ) : null}
+            {wsBusinessType === 'individual' ? (
+              <Field label="Giảm trừ bản thân TNCN (đ/tháng)">
+                <input type="number" min={0} value={wsDeduction} onChange={(e) => setWsDeduction(e.target.value)} />
               </Field>
-            </div>
-            <div className="form-row">
-              <Field label="TNDN">
-                <input type="number" step="0.01" min={0} max={1} value={wsTndn} onChange={(e) => setWsTndn(e.target.value)} />
-              </Field>
-              <Field label="Môn bài / năm (đ)">
-                <input type="number" min={0} value={wsMonBai} onChange={(e) => setWsMonBai(e.target.value)} />
-              </Field>
-            </div>
-            <Field label="Giảm trừ gia cảnh TNCN (đ/tháng)">
-              <input type="number" min={0} value={wsDeduction} onChange={(e) => setWsDeduction(e.target.value)} />
-            </Field>
+            ) : null}
             <button type="submit" disabled={savingWorkspace}>
               {savingWorkspace ? 'Đang lưu…' : editingWsId ? 'Lưu thay đổi' : 'Tạo không gian'}
             </button>

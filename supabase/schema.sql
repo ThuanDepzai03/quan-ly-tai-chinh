@@ -12,14 +12,15 @@ create table if not exists workspaces (
   owner_id uuid references auth.users(id) on delete cascade,
   name text not null,
   mode text not null check (mode in ('personal','household','team')),
+  business_type text check (business_type in ('individual','household_business','enterprise')),
+  business_sector text check (business_sector in ('goods','services','manufacturing_transport','other')),
   tax_circular text not null default 'TT88/2021',
-  tax_method text not null default 'turnover_tncn'
-    check (tax_method in ('turnover_tncn','profit_tndn','progressive_tncn')),
-  vat_rate numeric not null default 0.01,
-  tncn_rate numeric not null default 0.005,
+  tax_method text not null default 'business_revenue',
+  vat_rate numeric not null default 0.10,
+  tncn_rate numeric not null default 0,
   tndn_rate numeric not null default 0.20,
-  mon_bai numeric not null default 1000000,
-  tncn_deduction numeric not null default 11000000,
+  mon_bai numeric not null default 0, -- legacy storage only; not used in 2026 tax estimates
+  tncn_deduction numeric not null default 15500000,
   created_at timestamptz default now()
 );
 create table if not exists members (
@@ -158,7 +159,7 @@ create table if not exists stock_movements (
 create table if not exists tax_payments (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid references workspaces(id) on delete cascade,
-  tax_type text not null check (tax_type in ('VAT','TNCN','TNDN','mon_bai')),
+  tax_type text not null check (tax_type in ('VAT','TNCN','TNDN','other','mon_bai')), -- mon_bai retained for history
   period text not null,
   amount numeric not null,
   paid boolean not null default false,
@@ -169,12 +170,13 @@ create table if not exists tax_settings (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid references workspaces(id) on delete cascade unique,
   circular text not null default 'TT88/2021',
-  tax_method text not null default 'turnover_tncn'
-    check (tax_method in ('turnover_tncn','profit_tndn','progressive_tncn')),
-  vat_rate numeric not null default 0.01,
-  tncn_rate numeric not null default 0.005,
+  business_type text check (business_type in ('individual','household_business','enterprise')),
+  business_sector text check (business_sector in ('goods','services','manufacturing_transport','other')),
+  tax_method text not null default 'business_revenue',
+  vat_rate numeric not null default 0.10,
+  tncn_rate numeric not null default 0,
   tndn_rate numeric not null default 0.20,
-  mon_bai numeric not null default 1000000
+  mon_bai numeric not null default 0 -- legacy storage only
 );
 
 -- Nâng cấp các bảng đã tồn tại từ schema cũ. CREATE TABLE IF NOT EXISTS không
@@ -184,15 +186,25 @@ alter table workspaces
   add column if not exists owner_id uuid references auth.users(id) on delete cascade,
   add column if not exists name text not null default 'Không gian của tôi',
   add column if not exists mode text not null default 'household',
+  add column if not exists business_type text,
+  add column if not exists business_sector text,
   add column if not exists tax_circular text not null default 'TT88/2021',
-  add column if not exists tax_method text not null default 'turnover_tncn'
-    check (tax_method in ('turnover_tncn','profit_tndn','progressive_tncn')),
-  add column if not exists vat_rate numeric not null default 0.01,
-  add column if not exists tncn_rate numeric not null default 0.005,
+  add column if not exists tax_method text not null default 'business_revenue',
+  add column if not exists vat_rate numeric not null default 0.10,
+  add column if not exists tncn_rate numeric not null default 0,
   add column if not exists tndn_rate numeric not null default 0.20,
-  add column if not exists mon_bai numeric not null default 1000000,
-  add column if not exists tncn_deduction numeric not null default 11000000,
+  add column if not exists mon_bai numeric not null default 0, -- legacy storage only
+  add column if not exists tncn_deduction numeric not null default 15500000,
   add column if not exists created_at timestamptz default now();
+alter table workspaces drop constraint if exists workspaces_tax_method_check;
+alter table workspaces add constraint workspaces_tax_method_check
+  check (tax_method in ('turnover_tncn','profit_tndn','progressive_tncn','business_revenue','business_profit','enterprise_profit','employment_income'));
+alter table workspaces drop constraint if exists workspaces_business_type_check;
+alter table workspaces add constraint workspaces_business_type_check
+  check (business_type is null or business_type in ('individual','household_business','enterprise'));
+alter table workspaces drop constraint if exists workspaces_business_sector_check;
+alter table workspaces add constraint workspaces_business_sector_check
+  check (business_sector is null or business_sector in ('goods','services','manufacturing_transport','other'));
 alter table members
   add column if not exists workspace_id uuid references workspaces(id) on delete cascade,
   add column if not exists user_id uuid references auth.users(id) on delete cascade,
@@ -332,15 +344,28 @@ alter table tax_payments
   add column if not exists paid boolean not null default false,
   add column if not exists due_date date,
   add column if not exists note text;
+alter table tax_payments drop constraint if exists tax_payments_tax_type_check;
+alter table tax_payments add constraint tax_payments_tax_type_check
+  check (tax_type in ('VAT','TNCN','TNDN','other','mon_bai'));
 alter table tax_settings
   add column if not exists workspace_id uuid references workspaces(id) on delete cascade,
   add column if not exists circular text not null default 'TT88/2021',
-  add column if not exists tax_method text not null default 'turnover_tncn'
-    check (tax_method in ('turnover_tncn','profit_tndn','progressive_tncn')),
-  add column if not exists vat_rate numeric not null default 0.01,
-  add column if not exists tncn_rate numeric not null default 0.005,
+  add column if not exists business_type text,
+  add column if not exists business_sector text,
+  add column if not exists tax_method text not null default 'business_revenue',
+  add column if not exists vat_rate numeric not null default 0.10,
+  add column if not exists tncn_rate numeric not null default 0,
   add column if not exists tndn_rate numeric not null default 0.20,
-  add column if not exists mon_bai numeric not null default 1000000;
+  add column if not exists mon_bai numeric not null default 0; -- legacy storage only
+alter table tax_settings drop constraint if exists tax_settings_tax_method_check;
+alter table tax_settings add constraint tax_settings_tax_method_check
+  check (tax_method in ('turnover_tncn','profit_tndn','progressive_tncn','business_revenue','business_profit','enterprise_profit','employment_income'));
+alter table tax_settings drop constraint if exists tax_settings_business_type_check;
+alter table tax_settings add constraint tax_settings_business_type_check
+  check (business_type is null or business_type in ('individual','household_business','enterprise'));
+alter table tax_settings drop constraint if exists tax_settings_business_sector_check;
+alter table tax_settings add constraint tax_settings_business_sector_check
+  check (business_sector is null or business_sector in ('goods','services','manufacturing_transport','other'));
 
 create index if not exists idx_tx_ws_date on transactions(workspace_id, date desc);
 create index if not exists idx_tx_product on transactions(product_id);
@@ -426,11 +451,8 @@ end $$;
 -- và IMEI trong state trước khi đồng bộ cả products lẫn stock_movements.
 drop trigger if exists trg_stock on stock_movements;
 
--- ============ KHỐI D: hàm tính thuế TT88 (dùng ở SQL khi cần) ============
-create or replace function tax88(revenue numeric, vat_rate numeric default 0.01, tncn_rate numeric default 0.005)
-returns table (vat numeric, tncn numeric, total numeric) language sql immutable as $$
-  select round(revenue * vat_rate), round(revenue * tncn_rate), round(revenue * (vat_rate + tncn_rate));
-$$;
+-- Hủy helper TT88 cũ vì dùng chung tỷ lệ VAT/TNCN và không phân biệt loại hình.
+drop function if exists tax88(numeric, numeric, numeric);
 
 -- Storage bucket cho hóa đơn (tạo trong Dashboard > Storage nếu cần): invoices (private).
 -- insert into storage.buckets (id, name, public) values ('invoices', 'invoices', false)

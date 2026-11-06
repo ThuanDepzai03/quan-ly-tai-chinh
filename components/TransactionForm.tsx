@@ -185,16 +185,16 @@ export default function TransactionForm({ state, onDone, initialType = 'income' 
       {type !== 'transfer' ? (
         <div className="form-row">
           <Field label="Đánh dấu thuế (loại thuế)">
-            <select value={taxType} onChange={(e) => { setTaxType(e.target.value); setTaxRate(e.target.value === 'VAT' ? '0.01' : e.target.value === 'TNCN' ? '0.005' : e.target.value === 'TNDN' ? '0.2' : ''); }}>
+            <select value={taxType} onChange={(e) => { setTaxType(e.target.value); setTaxRate(''); }}>
               <option value="">— Không đánh dấu thuế —</option>
               <option value="VAT">VAT</option>
               <option value="TNCN">TNCN</option>
               <option value="TNDN">TNDN</option>
-              <option value="mon_bai">Môn bài</option>
+              <option value="other">Thuế khác</option>
             </select>
           </Field>
-          <Field label="Thuế suất (VD: 0.01 = 1%)">
-            <input type="number" step="0.001" min={0} max={1} placeholder="0.01" value={taxRate} onChange={(e) => setTaxRate(e.target.value)} disabled={!taxType} />
+          <Field label="Thuế suất tham chiếu (nhập theo hồ sơ, nếu cần)">
+            <input type="number" step="0.001" min={0} max={1} value={taxRate} onChange={(e) => setTaxRate(e.target.value)} disabled={!taxType} />
           </Field>
         </div>
       ) : null}

@@ -21,7 +21,7 @@ Khi deploy hãy đăng ký tài khoản thật qua Supabase Auth (Email/Google).
 1. Tạo Project, Region **Singapore**, lưu Project URL + anon key + service_role key.
 2. Authentication > Providers > Email: bật **Enable email provider**. Lúc test tắt **Confirm email** để đăng nhập nhanh, dùng thật bật lại.
 3. Authentication > URL Configuration: Site URL = domain Vercel sau Bước 3 (VD: `https://quan-ly-tai-chinh-sage.vercel.app/`). **Redirect URLs phải chứa đúng domain đang chạy** — thêm `https://quan-ly-tai-chinh-sage.vercel.app/**` và `https://quan-ly-tai-chinh-sage.vercel.app/auth`. Nếu Site URL và Redirect URL lệch nhau (VD: Site là `...-sage.vercel.app` mà Redirect chỉ có `quanlytaichinh.vercel.app`) thì link xác thực / đổi mật khẩu sẽ không quay về đúng app.
-4. SQL Editor: dán toàn bộ `supabase/schema.sql` → Run. Đủ 16 bảng + RLS cho cả 16 bảng + trigger trừ/cộng tồn kho (chặn âm kho) + hàm `tax88()`.
+4. SQL Editor: dán toàn bộ `supabase/schema.sql` → Run. Đủ 16 bảng + RLS cho cả 16 bảng + trigger trừ/cộng tồn kho (chặn âm kho).
 
 ### 2.1. Khắc phục lỗi Confirm email / đăng nhập (v2.1)
 **Triệu chứng user gặp:** bật Confirm email thì không nhận được mail xác thực, đăng ký lại báo `User already registered`, đăng nhập báo `Invalid login credentials` dù mật khẩu đúng, đổi mật khẩu xong vẫn không vào được.
@@ -47,7 +47,12 @@ Vercel > Add New Project > Import repo GitHub > Framework: Next.js > Environment
 - `SUPABASE_SERVICE_ROLE_KEY` (server-only)
 Deploy → domain `https://quanlytaichinh.vercel.app` (tên có thể khác nếu đã có người dùng, lấy đúng domain Vercel cấp).
 
-Test nhanh: đăng ký 1 tài khoản → tạo workspace → bán 5 ốp lưng iPhone 15 (Đen) → kiểm tra doanh thu 445.000đ, lãi 270.000đ ở trang Kho hàng / Báo cáo. Trang Thuế ước tính VAT và phương pháp thuế thu nhập riêng theo cấu hình workspace; các số mặc định chỉ là tham khảo, cần đối chiếu cơ quan thuế.
+Test nhanh: đăng ký 1 tài khoản → tạo workspace → bán 5 ốp lưng iPhone 15 (Đen) → kiểm tra doanh thu 445.000đ, lãi 270.000đ ở trang Kho hàng / Báo cáo. Trang Thuế phân loại chủ thể riêng với chế độ kế toán; TNDN chỉ được ước tính khi nhập lợi nhuận tính thuế.
+
+### 3.1. Ước tính thuế năm 2026
+Quy tắc và ngưỡng ước tính được tập trung tại `lib/tax-config.ts`, căn cứ tham chiếu gồm Luật Thuế GTGT số 48/2024/QH15 và Luật sửa đổi số 149/2025/QH15, Luật Thuế TNCN số 109/2025/QH15, Luật Thuế TNDN số 67/2025/QH15, Nghị quyết số 198/2025/QH15 và Thông tư số 152/2025/TT-BTC. Hộ kinh doanh được tính theo nhóm ngành và ngưỡng doanh thu; doanh nghiệp dùng bậc thuế suất theo doanh thu năm nhưng nhân với lợi nhuận tính thuế đã nhập. Doanh thu năm có thể nhập riêng để chọn đúng ngưỡng/bậc.
+
+Các số chỉ phục vụ dự toán, không thay thế tờ khai: VAT doanh nghiệp chưa thể xác định chính xác nếu thiếu phân loại hàng hóa, hóa đơn và VAT đầu vào; thu nhập chịu thuế cần số liệu kế toán và điều kiện khấu trừ thực tế. Lệ phí môn bài không còn được dự toán trong mô hình 2026; bản ghi cũ vẫn được giữ để tra cứu.
 
 ## 4. Build APK (Android) / iOS
 ```bash
@@ -67,7 +72,7 @@ app/
   auth/page.tsx       Đăng ký / Đăng nhập / Quên mật khẩu (Supabase Auth, fallback local)
   dashboard/page.tsx  Tổng quan: số dư, thu/chi tháng, lãi, thuế, ví, giao dịch, ngân sách, mục tiêu, nợ, nhắc nhở
   kho/page.tsx        Kho hàng: tìm/lọc, thêm/sửa/xóa sản phẩm, biến thể + IMEI, nhập kho, bán hàng tính lãi
-  thue/page.tsx       Ước tính VAT + phương pháp thuế thu nhập cấu hình riêng; theo dõi sổ nộp thuế và mẫu sổ TT88 S1–S7-HKD
+  thue/page.tsx       Ước tính thuế theo loại hình; theo dõi sổ nộp thuế và mẫu sổ HKD TT88 S1–S7-HKD hiện có
   bao-cao/page.tsx    Báo cáo theo tháng: lãi theo sản phẩm, thu/chi theo danh mục, theo tháng, xuất CSV + Excel thật
   cai-dat/page.tsx    Không gian Thêm/Sửa/Xóa, cài đặt thuế, danh mục, ngân sách, tài khoản, PIN, xóa dữ liệu mẫu
 components/
@@ -78,7 +83,8 @@ components/
   ProductForm.tsx     Form Thêm/Sửa sản phẩm: biến thể, trường tùy chỉnh (Màu sắc/IMEI/Serial/Bảo hành…)
 lib/
   types.ts            16 kiểu dữ liệu khớp schema.sql
-  utils.ts            fmtVND, profitOf, tax88, TNCN lũy tiến, TNDN, môn bài, downloadCSV, downloadXLSX
+  utils.ts            Hàm tính VAT, TNCN, TNDN tách theo loại hình; downloadCSV, downloadXLSX
+  tax-config.ts       Cấu hình ngưỡng, thuế suất, phương pháp và căn cứ tham chiếu hiệu lực 2026
   demo.ts             Dữ liệu mẫu hộ kinh doanh (seedDemoState / emptyState)
   auth.ts             Đăng nhập local (SHA-256 + salt) — chỉ bản demo
   data.ts             useAppData(): đọc/ghi Supabase khi có cấu hình, localStorage khi chưa có;
@@ -86,7 +92,7 @@ lib/
   supabase/client.ts  createBrowserClient (trả null khi chưa cấu hình env)
   supabase/server.ts  createServerClient cho Server Components
                       (chưa dùng trong luồng hiện tại; Auth hoạt động qua browser client)
-supabase/schema.sql   16 bảng + RLS + trigger + hàm tax88()
+supabase/schema.sql   16 bảng + RLS + trigger + các cột hồ sơ thuế
 ```
 
 ## 6. Bảo mật

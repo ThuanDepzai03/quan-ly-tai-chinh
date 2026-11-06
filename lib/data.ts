@@ -6,16 +6,44 @@
 
 import { createContext, createElement, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import type {
-  AppState, AppUser, Budget, Category, Debt, Goal, Member, Product,
+  AppState, AppUser, Budget, BusinessSector, BusinessType, Category, Debt, Goal, Member, Product,
   ProductCategory, ProductField, ProductInput, ProductVariant, Reminder, StockMovement,
-  TaxCircular, TaxPayment, Transaction, TxInput, Wallet, Workspace, WorkspaceMode,
+  TaxCalculationMethod, TaxCircular, TaxPayment, Transaction, TxInput, Wallet, Workspace, WorkspaceMode,
 } from './types';
 import { emptyState, seedDemoState, seedDemoInventoryData } from './demo';
+import { defaultTaxMethod, inferBusinessType } from './tax-config';
 import { getSessionUser, setSessionUser, syncSessionUserFromSupabase } from './auth';
 import { createClient, isSupabaseConfigured } from './supabase/client';
 import { uid } from './utils';
 
 const stateKey = (userId: string) => `qltc-v2-state-${userId}`;
+const TAX_METHODS = new Set<TaxCalculationMethod>([
+  'business_revenue', 'business_profit', 'enterprise_profit', 'employment_income',
+]);
+function normalizeWorkspace(workspace: Workspace): Workspace {
+  const businessType = workspace.business_type ?? inferBusinessType(workspace.mode);
+  const oldMethod = workspace.tax_method as string | undefined;
+  const legacyMethod: Record<string, TaxCalculationMethod> = {
+    turnover_tncn: businessType === 'household_business' ? 'business_revenue' : defaultTaxMethod(businessType),
+    profit_tndn: businessType === 'enterprise' ? 'enterprise_profit' : defaultTaxMethod(businessType),
+    progressive_tncn: businessType === 'individual' ? 'employment_income' : defaultTaxMethod(businessType),
+  };
+  const taxMethod = oldMethod && TAX_METHODS.has(oldMethod as TaxCalculationMethod)
+    ? oldMethod as TaxCalculationMethod
+    : oldMethod ? legacyMethod[oldMethod] ?? defaultTaxMethod(businessType) : defaultTaxMethod(businessType);
+  return {
+    ...workspace,
+    tax_circular: workspace.tax_circular === 'TNCN' ? 'none' : workspace.tax_circular,
+    business_type: businessType,
+    business_sector: workspace.business_sector ?? (businessType === 'household_business' ? 'goods' : 'other'),
+    tax_method: taxMethod,
+    vat_rate: businessType === 'enterprise' && workspace.vat_rate === 0.01 ? 0.1 : workspace.vat_rate,
+    tncn_deduction: workspace.tncn_deduction === undefined || workspace.tncn_deduction === null
+      || workspace.tncn_deduction === 11_000_000
+      ? 15_500_000
+      : workspace.tncn_deduction,
+  };
+}
 const TABLES = [
   'workspaces', 'members', 'wallets', 'categories', 'transactions', 'budgets',
   'goals', 'debts', 'reminders', 'products', 'product_categories',
@@ -77,10 +105,7 @@ function loadLocal(user: AppUser): AppState | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as AppState;
     parsed.user = user;
-    parsed.workspaces = (parsed.workspaces ?? []).map((workspace) => ({
-      ...workspace,
-      tax_method: workspace.tax_method ?? 'turnover_tncn',
-    }));
+    parsed.workspaces = (parsed.workspaces ?? []).map(normalizeWorkspace);
     return parsed;
   } catch { return null; }
 }
@@ -173,7 +198,7 @@ export interface AppData {
   retryLoad: () => void;
   currentWorkspace: Workspace | null;
   switchWorkspace: (id: string) => void;
-  saveWorkspace: (input: { id?: string; name: string; mode: WorkspaceMode; tax_circular: TaxCircular; vat_rate?: number; tncn_rate?: number; tndn_rate?: number; mon_bai?: number; tncn_deduction?: number }) => Promise<string | null>;
+  saveWorkspace: (input: { id?: string; name: string; mode: WorkspaceMode; business_type: BusinessType; business_sector: BusinessSector; tax_circular: TaxCircular; vat_rate?: number; tncn_rate?: number; tndn_rate?: number; tncn_deduction?: number }) => Promise<string | null>;
   saveMember: (input: { id?: string; email: string; name: string; role: Member['role'] }) => Promise<string | null>;
   deleteMember: (id: string) => string | null;
   deleteWorkspace: (id: string) => string | null;
@@ -210,7 +235,7 @@ export interface AppData {
   saveTaxPayment: (input: { id?: string; tax_type: TaxPayment['tax_type']; period: string; amount: number; paid: boolean; due_date?: string | null; note?: string | null }) => Promise<string | null>;
   toggleTaxPaid: (id: string) => void;
   deleteTaxPayment: (id: string) => void;
-  updateTaxSettings: (patch: Partial<Pick<Workspace, 'tax_circular' | 'tax_method' | 'vat_rate' | 'tncn_rate' | 'tndn_rate' | 'mon_bai' | 'tncn_deduction'>>) => void;
+  updateTaxSettings: (patch: Partial<Pick<Workspace, 'business_type' | 'business_sector' | 'tax_circular' | 'tax_method' | 'vat_rate' | 'tncn_rate' | 'tndn_rate' | 'tncn_deduction'>>) => void;
   /** Nạp chỉ phần kho mẫu (11 sản phẩm...) vào workspace hiện tại, chỉ khi
    *  kho đang trống — tương đương seedDemoInventory của bản demo. */
   seedDemoInventory: () => Promise<string | null>;
@@ -321,10 +346,7 @@ function useAppDataState(): AppData {
             (loaded as unknown as Record<string, unknown>)[key] = data as unknown;
           }
           if (!cancelled) {
-            const wsList = ((loaded.workspaces ?? []) as Workspace[]).map((workspace) => ({
-              ...workspace,
-              tax_method: workspace.tax_method ?? 'turnover_tncn',
-            }));
+            const wsList = ((loaded.workspaces ?? []) as Workspace[]).map(normalizeWorkspace);
             const full: AppState = {
               user: cloudUser, workspaces: wsList,
               currentWorkspaceId: wsList[0]?.id ?? null,
@@ -507,22 +529,23 @@ function useAppDataState(): AppData {
         if (!prevWs) return 'Không tìm thấy không gian cần cập nhật.';
         workspace = {
           ...prevWs,
-          name: input.name, mode: input.mode, tax_circular: input.tax_circular,
-          vat_rate: input.vat_rate ?? prevWs?.vat_rate ?? 0.01,
-          tncn_rate: input.tncn_rate ?? prevWs?.tncn_rate ?? 0.005,
+          name: input.name, mode: input.mode, business_type: input.business_type,
+          business_sector: input.business_sector, tax_circular: input.tax_circular,
+          vat_rate: input.vat_rate ?? prevWs?.vat_rate ?? 0.1,
+          tncn_rate: input.tncn_rate ?? prevWs?.tncn_rate ?? 0,
           tndn_rate: input.tndn_rate ?? prevWs?.tndn_rate ?? 0.2,
-          mon_bai: input.mon_bai ?? prevWs?.mon_bai ?? 1000000,
-          tncn_deduction: input.tncn_deduction ?? prevWs?.tncn_deduction ?? 11000000,
-          tax_method: prevWs.tax_method ?? 'turnover_tncn',
+          tncn_deduction: input.tncn_deduction ?? prevWs?.tncn_deduction ?? 15_500_000,
+          tax_method: defaultTaxMethod(input.business_type),
         };
       } else {
         workspace = {
           id: uid(), owner_id: user.id, name: input.name, mode: input.mode,
+          business_type: input.business_type, business_sector: input.business_sector,
           tax_circular: input.tax_circular,
-          vat_rate: input.vat_rate ?? 0.01, tncn_rate: input.tncn_rate ?? 0.005,
-          tndn_rate: input.tndn_rate ?? 0.2, mon_bai: input.mon_bai ?? 1000000,
-          tncn_deduction: input.tncn_deduction ?? 11000000,
-          tax_method: 'turnover_tncn',
+          vat_rate: input.vat_rate ?? 0.1, tncn_rate: input.tncn_rate ?? 0,
+          tndn_rate: input.tndn_rate ?? 0.2,
+          tncn_deduction: input.tncn_deduction ?? 15_500_000,
+          tax_method: defaultTaxMethod(input.business_type),
           created_at: new Date().toISOString(),
         };
       }
@@ -1018,9 +1041,10 @@ function useAppDataState(): AppData {
         cloudUpsert('workspaces', merged as unknown as Record<string, unknown>),
         cloudUpsert('tax_settings', {
           id: merged.id, workspace_id: merged.id, circular: merged.tax_circular,
-          tax_method: merged.tax_method ?? 'turnover_tncn',
+          business_type: merged.business_type, business_sector: merged.business_sector,
+          tax_method: merged.tax_method ?? defaultTaxMethod(merged.business_type ?? inferBusinessType(merged.mode)),
           vat_rate: merged.vat_rate, tncn_rate: merged.tncn_rate,
-          tndn_rate: merged.tndn_rate, mon_bai: merged.mon_bai,
+          tndn_rate: merged.tndn_rate,
         }),
       ]);
     },

@@ -1,4 +1,5 @@
-import type { TaxCalculationMethod } from './types';
+import type { BusinessSector, BusinessType, TaxCalculationMethod } from './types';
+import { TAX_RULES_2026 } from './tax-config';
 
 export const fmtVND = (n: number): string =>
   new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(Math.round(n));
@@ -8,22 +9,11 @@ export const fmtNum = (n: number): string => new Intl.NumberFormat('vi-VN').form
 /** Lãi bán hàng = số lượng × (giá bán − giá nhập). */
 export const profitOf = (qty: number, sale: number, cost: number): number => qty * (sale - cost);
 
-/** TT88/2021 hộ kinh doanh: thuế khoán theo doanh thu — VAT 1% + TNCN 0,5%. */
-export const tax88 = (revenue: number, vatRate = 0.01, tncnRate = 0.005) => {
-  const vat = Math.round(revenue * vatRate);
-  const tncn = Math.round(revenue * tncnRate);
-  return { vat, tncn, total: vat + tncn };
-};
-
-/** TNCN lũy tiến từng phần (biểu thuế hiện hành, tính trên thu nhập tính thuế/tháng). */
+/** TNCN lũy tiến theo biểu thuế cấu hình năm 2026. */
 export const calcTNCNProgressive = (taxableIncome: number): number => {
-  const brackets: Array<[number, number]> = [
-    [5000000, 0.05], [5000000, 0.1], [8000000, 0.15], [14000000, 0.2],
-    [20000000, 0.25], [28000000, 0.3], [Infinity, 0.35],
-  ];
   let remaining = Math.max(0, taxableIncome);
   let tax = 0;
-  for (const [width, rate] of brackets) {
+  for (const { width, rate } of TAX_RULES_2026.personalIncome.progressiveBrackets) {
     if (remaining <= 0) break;
     const part = Math.min(remaining, width);
     tax += part * rate;
@@ -32,58 +22,119 @@ export const calcTNCNProgressive = (taxableIncome: number): number => {
   return Math.round(tax);
 };
 
-/** TNDN = lợi nhuận trước thuế × thuế suất (mặc định 20%). */
-export const calcTNDN = (profitBeforeTax: number, rate = 0.2): number =>
-  Math.round(Math.max(0, profitBeforeTax) * rate);
+/** TNDN = lợi nhuận tính thuế × thuế suất được xác định theo quy định. */
+export const calcTNDN = (taxableProfit: number, rate: number): number =>
+  Math.round(Math.max(0, taxableProfit) * rate);
+
+/** TNCN kinh doanh theo thu nhập tính thuế, không phải thuế TNDN. */
+const calcHouseholdBusinessIncomeTax = (taxableIncome: number, rate: number): number =>
+  Math.round(Math.max(0, taxableIncome) * rate);
 
 export function estimateWorkspaceTax(input: {
+  businessType: BusinessType;
+  businessSector: BusinessSector;
   method: TaxCalculationMethod;
   revenue: number;
-  recordedProfit: number;
-  vatRate: number;
-  tncnRate: number;
-  tndnRate: number;
+  annualRevenue: number;
+  taxableProfit?: number;
+  monthlyIncome?: number;
+  vatRate?: number;
+  deductibleVat?: number;
   monthlyDeduction: number;
   periodMonths?: number;
 }) {
-  const vat = Math.round(Math.max(0, input.revenue) * input.vatRate);
+  const revenue = Math.max(0, input.revenue);
+  const annualRevenue = Math.max(0, input.annualRevenue);
   const periodMonths = Math.max(1, input.periodMonths ?? 1);
-  let incomeTax: number;
-  let incomeTaxLabel: string;
-  let incomeTaxFormula: string;
+  let vat: number | null = null;
+  let tncn: number | null = null;
+  let tndn: number | null = null;
+  let incomeTaxLabel = 'Thuế thu nhập';
+  let incomeTaxFormula = '';
+  let effectiveMethod = input.method;
+  let missingProfit = false;
+  const notes: string[] = [];
 
-  if (input.method === 'profit_tndn') {
-    incomeTax = calcTNDN(input.recordedProfit, input.tndnRate);
-    incomeTaxLabel = 'TNDN theo lãi ghi nhận';
-    incomeTaxFormula = `Lãi ghi nhận × ${(input.tndnRate * 100).toLocaleString('vi-VN')}%`;
-  } else if (input.method === 'progressive_tncn') {
-    const monthlyRevenue = Math.max(0, input.revenue) / periodMonths;
-    const monthlyTaxable = Math.max(0, monthlyRevenue - input.monthlyDeduction);
-    incomeTax = calcTNCNProgressive(monthlyTaxable) * periodMonths;
-    incomeTaxLabel = 'TNCN lũy tiến (ước tính)';
-    incomeTaxFormula = `Tính từng tháng trên max(0, doanh thu tháng − ${fmtVND(input.monthlyDeduction)})`;
+  if (input.businessType === 'household_business') {
+    const policy = TAX_RULES_2026.householdBusiness;
+    const rates = policy.revenueRates[input.businessSector];
+    incomeTaxLabel = 'TNCN kinh doanh';
+    if (annualRevenue <= policy.annualRevenueExemption) {
+      vat = 0;
+      tncn = 0;
+      notes.push(`Doanh thu năm không vượt ngưỡng ${fmtVND(policy.annualRevenueExemption)}; không tính VAT/TNCN kinh doanh trong ước tính.`);
+    } else {
+      vat = Math.round(revenue * rates.vat);
+      if (annualRevenue > policy.profitMethodRevenueThreshold) {
+        effectiveMethod = 'business_profit';
+        incomeTaxLabel = 'TNCN kinh doanh theo thu nhập tính thuế';
+        if (input.taxableProfit === undefined) {
+          missingProfit = true;
+          notes.push('Chưa nhập thu nhập tính thuế kỳ; không suy ra lợi nhuận từ doanh thu hoặc lãi bán hàng.');
+        } else {
+          const bracket = policy.incomeTaxRates.find((item) => annualRevenue <= item.maxAnnualRevenue)
+            ?? policy.incomeTaxRates[policy.incomeTaxRates.length - 1];
+          tncn = calcHouseholdBusinessIncomeTax(input.taxableProfit, bracket.rate);
+          incomeTaxFormula = `Thu nhập tính thuế × ${(bracket.rate * 100).toLocaleString('vi-VN')}%`;
+        }
+      } else {
+        effectiveMethod = 'business_revenue';
+        tncn = Math.round(revenue * rates.tncn);
+        incomeTaxLabel = 'TNCN kinh doanh theo doanh thu';
+        incomeTaxFormula = `Doanh thu kỳ × ${(rates.tncn * 100).toLocaleString('vi-VN')}% (${input.businessSector})`;
+      }
+    }
+    if (!incomeTaxFormula && tncn === 0) incomeTaxFormula = 'Không phát sinh theo ngưỡng doanh thu năm cấu hình';
+  } else if (input.businessType === 'enterprise') {
+    const vatRate = input.vatRate ?? TAX_RULES_2026.enterprise.defaultVatRate;
+    const deductibleVat = Math.max(0, input.deductibleVat ?? 0);
+    vat = Math.max(0, Math.round(revenue * vatRate) - deductibleVat);
+    const bracket = TAX_RULES_2026.enterprise.corporateIncomeTaxRates.find(
+      (item) => annualRevenue <= item.maxAnnualRevenue,
+    ) ?? TAX_RULES_2026.enterprise.corporateIncomeTaxRates[
+      TAX_RULES_2026.enterprise.corporateIncomeTaxRates.length - 1
+    ];
+    incomeTaxLabel = 'Thuế TNDN';
+    effectiveMethod = 'enterprise_profit';
+    if (input.taxableProfit === undefined) {
+      missingProfit = true;
+      notes.push('Chưa nhập lợi nhuận tính thuế kỳ; TNDN chưa được ước tính.');
+    } else {
+      tndn = calcTNDN(input.taxableProfit, bracket.rate);
+      incomeTaxFormula = `Lợi nhuận tính thuế × ${(bracket.rate * 100).toLocaleString('vi-VN')}% (doanh thu năm chọn bậc thuế)`;
+    }
+    notes.push('VAT doanh nghiệp chỉ là ước tính theo tỷ lệ cấu hình và VAT đầu vào được khấu trừ; cần đối chiếu hóa đơn, mặt hàng và phương pháp kê khai.');
+    notes.push('Bậc thuế TNDN có thể phụ thuộc doanh thu kỳ trước và điều kiện loại trừ/ưu đãi; ứng dụng chưa kiểm tra các điều kiện pháp lý này.');
   } else {
-    incomeTax = Math.round(Math.max(0, input.revenue) * input.tncnRate);
-    incomeTaxLabel = 'TNCN theo tỷ lệ doanh thu';
-    incomeTaxFormula = `Doanh thu × ${(input.tncnRate * 100).toLocaleString('vi-VN')}%`;
+    const monthlyIncome = Math.max(0, input.monthlyIncome ?? 0);
+    const monthlyTaxableIncome = Math.max(0, monthlyIncome - input.monthlyDeduction);
+    effectiveMethod = 'employment_income';
+    incomeTaxLabel = 'TNCN tiền lương lũy tiến';
+    if (input.monthlyIncome === undefined) {
+      missingProfit = true;
+      notes.push('Chưa nhập thu nhập tiền lương tháng; không dùng doanh thu kinh doanh làm căn cứ TNCN tiền lương.');
+    } else {
+      tncn = calcTNCNProgressive(monthlyTaxableIncome) * periodMonths;
+      incomeTaxFormula = `Tính lũy tiến trên max(0, thu nhập tháng − ${fmtVND(input.monthlyDeduction)})`;
+    }
+    notes.push('Ước tính chưa bao gồm người phụ thuộc, bảo hiểm bắt buộc và các khoản giảm trừ khác.');
   }
 
+  const incomeTax = input.businessType === 'enterprise' ? tndn : tncn;
+  const estimatedTotal = [vat, tncn, tndn].reduce<number>((sum, amount) => sum + (amount ?? 0), 0);
   return {
     vat,
+    tncn,
+    tndn,
+    other: null,
     incomeTax,
     incomeTaxLabel,
     incomeTaxFormula,
-    total: vat + incomeTax,
+    total: missingProfit ? null : estimatedTotal,
+    method: effectiveMethod,
+    notes,
   };
 }
-
-/** Thuế môn bài theo bậc doanh thu năm (mẫu TT88 — đối chiếu thông báo cơ quan thuế). */
-export const monBaiByRevenue = (yearRevenue: number): number => {
-  if (yearRevenue > 500000000) return 1000000;
-  if (yearRevenue > 300000000) return 500000;
-  if (yearRevenue > 100000000) return 300000;
-  return 0;
-};
 
 /** ID duy nhất — phải là UUID v4 hợp lệ vì mọi khóa chính trên Supabase đều
  *  là cột uuid. Trước đây uid() sinh chuỗi "base36-xxx" không phải UUID nên

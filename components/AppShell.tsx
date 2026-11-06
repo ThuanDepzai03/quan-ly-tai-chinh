@@ -6,7 +6,8 @@ import type { ReactNode } from 'react';
 import { useAppData } from '@/lib/data';
 import { setSessionUser, hasPin, verifyPin } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/client';
-import { WORKSPACE_MODE_LABELS } from '@/lib/types';
+import { BUSINESS_TYPE_LABELS, WORKSPACE_MODE_LABELS } from '@/lib/types';
+import { inferBusinessType } from '@/lib/tax-config';
 
 const NAV = [
   { href: '/dashboard', label: 'Tổng quan', icon: '🏠' },
@@ -108,7 +109,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
       {currentWorkspace ? (
         <p className="muted" style={{ margin: '4px 0 12px' }}>
           Không gian: <b style={{ color: 'var(--text)' }}>{currentWorkspace.name}</b>
-          {' '}• Chế độ thuế: {currentWorkspace.tax_circular}
+          {' '}• Loại hình tính thuế: {BUSINESS_TYPE_LABELS[currentWorkspace.business_type ?? inferBusinessType(currentWorkspace.mode)]}
         </p>
       ) : null}
       {syncError ? (
