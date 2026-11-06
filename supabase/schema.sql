@@ -310,10 +310,25 @@ create index if not exists idx_variants_product on product_variants(product_id);
 create index if not exists idx_wallets_ws on wallets(workspace_id);
 
 -- ============ KHỐI B: helper + RLS cho cả 16 bảng ============
-create or replace function is_workspace_member(ws uuid)
-returns boolean language sql stable as $$
-  select exists (select 1 from members where workspace_id = ws and user_id = auth.uid())
-      or exists (select 1 from workspaces where id = ws and owner_id = auth.uid());
+create or replace function public.is_workspace_member(ws uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1
+    from public.members as m
+    where m.workspace_id = ws
+      and m.user_id = (select auth.uid())
+  )
+  or exists (
+    select 1
+    from public.workspaces as w
+    where w.id = ws
+      and w.owner_id = (select auth.uid())
+  );
 $$;
 
 -- Bật RLS cho mọi bảng có workspace_id (trừ product_variants nối qua products).

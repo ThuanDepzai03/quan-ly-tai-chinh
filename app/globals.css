@@ -359,3 +359,38 @@ table.data tbody tr:hover { background: rgba(79, 131, 255, .09); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }
+.report-chart-controls { display: grid; justify-items: end; gap: 8px; }
+.report-period-buttons, .report-period-nav { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.report-period-nav { color: var(--muted); font-size: 13px; font-weight: 650; }
+.report-period-nav span { min-width: 128px; text-align: center; }
+.report-chart-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.report-chart-card {
+  min-width: 0; padding: 14px; border: 1px solid; border-radius: 18px;
+  background: linear-gradient(145deg, rgba(255,255,255,.055), rgba(255,255,255,.02));
+}
+.report-chart-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.report-chart-header h3 { margin: 0; font-size: 15px; }
+.report-chart-header p { margin: 4px 0 0; color: var(--muted); font-size: 11px; line-height: 1.4; }
+.report-chart-header strong { text-align: right; font-size: clamp(14px, 2vw, 18px); overflow-wrap: anywhere; }
+.report-chart-plot { width: 100%; margin-top: 8px; overflow: hidden; }
+.report-chart-plot svg { display: block; width: 100%; height: auto; overflow: visible; }
+.report-transfer-routes { margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,.1); }
+.report-transfer-routes > strong { font-size: 13px; }
+.report-transfer-routes p { margin: 8px 0 0; font-size: 12px; }
+.report-transfer-routes ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 10px 0 0; padding: 0; list-style: none; }
+.report-transfer-routes li {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  min-width: 0; padding: 10px 12px; border: 1px solid rgba(255,255,255,.1);
+  border-radius: 12px; background: rgba(255,255,255,.035); font-size: 12px;
+}
+.report-transfer-routes li span { min-width: 0; overflow-wrap: anywhere; }
+.report-transfer-routes li small { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; }
+.report-transfer-routes li b { flex: 0 0 auto; text-align: right; }
+@media (max-width: 760px) {
+  .report-chart-controls { justify-items: stretch; }
+  .report-period-buttons { justify-content: flex-start; }
+  .report-period-buttons button { flex: 1 1 auto; }
+  .report-period-nav { justify-content: space-between; }
+  .report-chart-grid { grid-template-columns: minmax(0, 1fr); }
+  .report-transfer-routes ul { grid-template-columns: minmax(0, 1fr); }
+}
