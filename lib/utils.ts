@@ -44,8 +44,16 @@ export const monBaiByRevenue = (yearRevenue: number): number => {
   return 0;
 };
 
-export const uid = (): string =>
-  `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
+/** ID duy nhất — phải là UUID v4 hợp lệ vì mọi khóa chính trên Supabase đều
+ *  là cột uuid. Trước đây uid() sinh chuỗi "base36-xxx" không phải UUID nên
+ *  mọi upsert lên Supabase đều lỗi âm thầm (chỉ log ra console). */
+export const uid = (): string => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  const hex = () => Math.floor((1 + Math.random()) * 0x10000).toString(16).slice(1);
+  return `${hex()}${hex()}-4000-4000-8000-${hex()}${hex()}${hex()}`;
+};
 
 export const todayISO = (): string => new Date().toISOString().slice(0, 10);
 export const monthISO = (d = new Date()): string =>

@@ -16,6 +16,24 @@ export default function Dashboard() {
   const [showWallet, setShowWallet] = useState(false);
   const [editWallet, setEditWallet] = useState<Wallet | null>(null);
   const [confirmDeleteTx, setConfirmDeleteTx] = useState<string | null>(null);
+  const [sampleMsg, setSampleMsg] = useState('');
+  const [sampleBusy, setSampleBusy] = useState(false);
+
+  async function loadSample() {
+    if (hasData && !confirm('Đã có dữ liệu — nạp dữ liệu mẫu sẽ THAY THẾ toàn bộ dữ liệu hiện tại của không gian này. Tiếp tục?')) return;
+    setSampleBusy(true);
+    const err = await data.loadSampleData();
+    setSampleMsg(err ?? 'Đã nạp dữ liệu mẫu giống bản demo (4 ví 176.610.000đ, 39 giao dịch, kho hàng, ngân sách, mục tiêu).');
+    setSampleBusy(false);
+  }
+
+  async function clearSample() {
+    if (!confirm('Xóa TOÀN BỘ dữ liệu và bắt đầu với không gian trống?')) return;
+    setSampleBusy(true);
+    const err = await data.clearSampleData();
+    setSampleMsg(err ?? 'Đã xóa dữ liệu mẫu, bắt đầu dùng thật.');
+    setSampleBusy(false);
+  }
 
   const wsId = state?.currentWorkspaceId ?? null;
   const wallets = useMemo(
@@ -24,6 +42,7 @@ export default function Dashboard() {
     () => (state?.transactions ?? []).filter((t) => t.workspace_id === wsId)
       .sort((a, b) => b.date.localeCompare(a.date)).slice(0, 20),
     [state, wsId]);
+  const hasData = wallets.length > 0 || txs.length > 0;
   const month = monthISO();
   const monthTxs = useMemo(
     () => (state?.transactions ?? []).filter((t) => t.workspace_id === wsId && t.date.startsWith(month)),
@@ -58,6 +77,25 @@ export default function Dashboard() {
         <StatCard label="Lãi bán hàng tháng này" value={fmtVND(profit)} sub="Doanh thu − Giá vốn" />
         <StatCard label="Thuế TT88 ước tính" value={fmtVND(tax.total)} sub={`VAT ${fmtVND(tax.vat)} + TNCN ${fmtVND(tax.tncn)}`} />
       </div>
+
+      {sampleMsg ? <p className="glass" style={{ padding: '12px 20px' }}>{sampleMsg}</p> : null}
+
+      <GlassCard title="Dữ liệu mẫu" action={
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button className="btn-small" onClick={loadSample} disabled={sampleBusy}>
+            {sampleBusy ? 'Đang nạp…' : '📥 Tải dữ liệu mẫu giống bản demo'}
+          </button>
+          <button className="btn-small btn-secondary" onClick={clearSample} disabled={sampleBusy}>
+            Xóa dữ liệu mẫu — dùng thật
+          </button>
+        </div>
+      }>
+        <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+          {hasData
+            ? 'Tài khoản đã có dữ liệu. Nạp dữ liệu mẫu sẽ thay thế toàn bộ dữ liệu hiện tại (có hỏi xác nhận trước).'
+            : 'Tài khoản đang trống. Bấm “Tải dữ liệu mẫu” để nạp đúng dữ liệu mẫu hộ kinh doanh như bản demo: 4 ví 176.610.000đ, 39 giao dịch 8–11/2026, 11 sản phẩm kho, ngân sách, mục tiêu, nợ vay, nhắc nhở, thuế TT88.'}
+        </p>
+      </GlassCard>
 
       <GlassCard title="Ví / Tài khoản" action={
         <button className="btn-small" onClick={() => { setEditWallet(null); setShowWallet(true); }}>+ Thêm ví</button>

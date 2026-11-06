@@ -269,14 +269,21 @@ export default function CaiDat() {
       </GlassCard>
 
       <GlassCard title="Dữ liệu mẫu">
-        <p className="muted">Xóa toàn bộ dữ liệu hiện tại và bắt đầu lại (giữ nguyên tài khoản đăng nhập).</p>
+        <p className="muted">Nạp dữ liệu mẫu giống bản demo, hoặc xóa toàn bộ dữ liệu hiện tại và bắt đầu lại (giữ nguyên tài khoản đăng nhập). Nạp/xóa ghi thật lên Supabase.</p>
         <div className="flex-row">
-          <button className="btn-secondary" onClick={() => { data.resetData(true); setMsg('Đã nạp lại dữ liệu mẫu hộ kinh doanh.'); }}>
-            Nạp lại dữ liệu mẫu
+          <button className="btn-secondary" onClick={async () => {
+            if ((state?.wallets.length ?? 0) > 0 || (state?.transactions.length ?? 0) > 0) {
+              if (!confirm('Đã có dữ liệu — nạp dữ liệu mẫu sẽ THAY THẾ toàn bộ dữ liệu hiện tại. Tiếp tục?')) return;
+            }
+            const err = await data.loadSampleData();
+            setMsg(err ?? 'Đã nạp dữ liệu mẫu giống bản demo (4 ví 176.610.000đ, 39 giao dịch, kho hàng, ngân sách, mục tiêu).');
+          }}>
+            📥 Tải dữ liệu mẫu giống bản demo
           </button>
-          <button className="btn-danger" onClick={() => {
+          <button className="btn-danger" onClick={async () => {
             if (confirm('Xóa TOÀN BỘ dữ liệu và bắt đầu với không gian trống?')) {
-              data.resetData(false); setMsg('Đã xóa dữ liệu mẫu, bắt đầu dùng thật.');
+              const err = await data.clearSampleData();
+              setMsg(err ?? 'Đã xóa dữ liệu mẫu, bắt đầu dùng thật.');
             }
           }}>Xóa dữ liệu mẫu — dùng thật</button>
         </div>

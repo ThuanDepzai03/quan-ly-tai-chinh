@@ -93,6 +93,11 @@ export interface AppData {
   deleteTaxPayment: (id: string) => void;
   updateTaxSettings: (patch: Partial<Pick<Workspace, 'tax_circular' | 'vat_rate' | 'tncn_rate' | 'tndn_rate' | 'mon_bai'>>) => void;
   resetData: (withDemo: boolean) => void;
+  /** Nạp dữ liệu mẫu giống bản demo (ghi thật lên Supabase ở chế độ cloud).
+   *  Trả về null khi thành công, thông báo lỗi khi thất bại. */
+  loadSampleData: () => Promise<string | null>;
+  /** Xóa toàn bộ dữ liệu, bắt đầu với không gian trống (ghi thật lên Supabase). */
+  clearSampleData: () => Promise<string | null>;
 }
 
 export function useAppData(): AppData {
@@ -101,6 +106,8 @@ export function useAppData(): AppData {
   const [mode, setMode] = useState<'local' | 'cloud'>('local');
   const stateRef = useRef<AppState | null>(null);
   stateRef.current = state;
+  const modeRef = useRef<'local' | 'cloud'>('local');
+  modeRef.current = mode;
   // Tăng khi Supabase báo session đổi sang user khác (SIGNED_IN) để tải
   // lại dữ liệu cho đúng user. TOKEN_REFRESHED cùng user thì không tải lại.
   const [authTick, setAuthTick] = useState(0);
@@ -221,6 +228,101 @@ export function useAppData(): AppData {
   }, []);
 
   const currentWorkspace = state?.workspaces.find((w) => w.id === state.currentWorkspaceId) ?? null;
+
+  // --- Dữ liệu mẫu: nạp / xóa thật, cả ở chế độ cloud (Supabase) ---
+  // Trước v4, resetData() chỉ setState local nên ở chế độ cloud bấm "Nạp lại
+  // dữ liệu mẫu" xong F5 là mất sạch. Hai hàm dưới đây ghi/xóa thật trên
+  // Supabase: ghi dữ liệu mới TRƯỚC (workspace mới, không đụng id cũ),
+  // rồi mới xóa dữ liệu cũ — để nếu ghi lỗi thì dữ liệu cũ vẫn còn nguyên.
+  // Lưu ý: bảng members trên Supabase chỉ có 4 cột (id, workspace_id,
+  // user_id, role) nên khi upsert phải lược bỏ email/name của bản local.
+  const deleteCloudWorkspaceData = useCallback(async (sb: NonNullable<ReturnType<typeof createClient>>, wsIds: string[], productIds: string[]) => {
+    if (wsIds.length === 0) return;
+    const del = async (table: TableName) => {
+      const { error } = await sb.from(table).delete().in('workspace_id', wsIds);
+      if (error) throw error;
+    };
+    await del('transactions'); await del('budgets'); await del('goals');
+    await del('debts'); await del('reminders'); await del('stock_movements');
+    await del('tax_payments');
+    if (productIds.length > 0) {
+      const { error } = await sb.from('product_variants').delete().in('product_id', productIds);
+      if (error) throw error;
+    }
+    await del('products'); await del('product_fields'); await del('product_categories');
+    await del('wallets'); await del('categories'); await del('members');
+    const { error } = await sb.from('workspaces').delete().in('id', wsIds);
+    if (error) throw error;
+  }, []);
+
+  const upsertCloudState = useCallback(async (sb: NonNullable<ReturnType<typeof createClient>>, s: AppState) => {
+    const upsert = async (table: TableName, rows: Array<Record<string, unknown>>) => {
+      if (rows.length === 0) return;
+      const { error } = await sb.from(table).upsert(rows as never);
+      if (error) throw error;
+    };
+    await upsert('workspaces', s.workspaces as unknown as Array<Record<string, unknown>>);
+    await upsert('members', s.members.map((m) => ({ id: m.id, workspace_id: m.workspace_id, user_id: m.user_id, role: m.role })));
+    await upsert('wallets', s.wallets as unknown as Array<Record<string, unknown>>);
+    await upsert('categories', s.categories as unknown as Array<Record<string, unknown>>);
+    await upsert('product_categories', s.productCategories as unknown as Array<Record<string, unknown>>);
+    await upsert('products', s.products as unknown as Array<Record<string, unknown>>);
+    await upsert('product_variants', s.productVariants as unknown as Array<Record<string, unknown>>);
+    await upsert('product_fields', s.productFields as unknown as Array<Record<string, unknown>>);
+    await upsert('transactions', s.transactions as unknown as Array<Record<string, unknown>>);
+    await upsert('budgets', s.budgets as unknown as Array<Record<string, unknown>>);
+    await upsert('goals', s.goals as unknown as Array<Record<string, unknown>>);
+    await upsert('debts', s.debts as unknown as Array<Record<string, unknown>>);
+    await upsert('reminders', s.reminders as unknown as Array<Record<string, unknown>>);
+    await upsert('stock_movements', s.stockMovements as unknown as Array<Record<string, unknown>>);
+    await upsert('tax_payments', s.taxPayments as unknown as Array<Record<string, unknown>>);
+  }, []);
+
+  const loadSampleData = useCallback(async (): Promise<string | null> => {
+    const user = stateRef.current?.user;
+    if (!user) return 'Chưa đăng nhập.';
+    const seed = seedDemoState(user);
+    if (modeRef.current === 'cloud') {
+      const sb = createClient();
+      if (!sb) return 'Chưa cấu hình Supabase.';
+      const oldWsIds = (stateRef.current?.workspaces ?? []).map((w) => w.id);
+      const oldProductIds = (stateRef.current?.products ?? []).map((p) => p.id);
+      try {
+        await upsertCloudState(sb, seed);
+        await deleteCloudWorkspaceData(sb, oldWsIds, oldProductIds);
+      } catch (e) {
+        console.error('Nạp dữ liệu mẫu lỗi:', e);
+        return `Không ghi được dữ liệu mẫu lên Supabase: ${e instanceof Error ? e.message : String(e)}`;
+      }
+      setState(seed); setMode('cloud');
+      return null;
+    }
+    setState(seed); saveLocal(seed);
+    return null;
+  }, [deleteCloudWorkspaceData, upsertCloudState]);
+
+  const clearSampleData = useCallback(async (): Promise<string | null> => {
+    const user = stateRef.current?.user;
+    if (!user) return 'Chưa đăng nhập.';
+    const fresh = emptyState(user);
+    if (modeRef.current === 'cloud') {
+      const sb = createClient();
+      if (!sb) return 'Chưa cấu hình Supabase.';
+      const oldWsIds = (stateRef.current?.workspaces ?? []).map((w) => w.id);
+      const oldProductIds = (stateRef.current?.products ?? []).map((p) => p.id);
+      try {
+        await upsertCloudState(sb, fresh);
+        await deleteCloudWorkspaceData(sb, oldWsIds, oldProductIds);
+      } catch (e) {
+        console.error('Xóa dữ liệu mẫu lỗi:', e);
+        return `Không xóa được dữ liệu trên Supabase: ${e instanceof Error ? e.message : String(e)}`;
+      }
+      setState(fresh); setMode('cloud');
+      return null;
+    }
+    setState(fresh); saveLocal(fresh);
+    return null;
+  }, [deleteCloudWorkspaceData, upsertCloudState]);
 
   const api: AppData = {
     state, loading, mode, currentWorkspace,
@@ -577,11 +679,11 @@ export function useAppData(): AppData {
       workspaces: prev.workspaces.map((w) => (w.id === prev.currentWorkspaceId ? { ...w, ...patch } : w)),
     })),
     resetData: (withDemo) => {
-      const user = stateRef.current?.user; if (!user) return;
-      const fresh = withDemo ? seedDemoState(user) : emptyState(user);
-      setState(fresh);
-      if (mode === 'local') saveLocal(fresh);
+      // Giữ tương thích với các nút cũ: bản async mới ở load/clearSampleData.
+      void (withDemo ? loadSampleData() : clearSampleData());
     },
+    loadSampleData,
+    clearSampleData,
   };
   return api;
 }

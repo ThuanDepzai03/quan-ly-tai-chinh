@@ -9,11 +9,11 @@ import { createClient } from '@/lib/supabase/client';
 import { WORKSPACE_MODE_LABELS } from '@/lib/types';
 
 const NAV = [
-  { href: '/dashboard', label: 'Tổng quan' },
-  { href: '/kho', label: 'Kho hàng' },
-  { href: '/thue', label: 'Thuế' },
-  { href: '/bao-cao', label: 'Báo cáo' },
-  { href: '/cai-dat', label: 'Cài đặt' },
+  { href: '/dashboard', label: 'Tổng quan', icon: '🏠' },
+  { href: '/kho', label: 'Kho hàng', icon: '📦' },
+  { href: '/thue', label: 'Thuế', icon: '🧾' },
+  { href: '/bao-cao', label: 'Báo cáo', icon: '📊' },
+  { href: '/cai-dat', label: 'Cài đặt', icon: '⚙️' },
 ];
 
 /** Khung chung cho các trang đã đăng nhập: header, chuyển workspace, menu. */
@@ -70,7 +70,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div>
+    <div className="app-shell">
       <header className="app-header">
         <div>
           <Link href="/dashboard" style={{ textDecoration: 'none', color: 'inherit' }}>
@@ -100,12 +100,17 @@ export default function AppShell({ children }: { children: ReactNode }) {
           {' '}• Chế độ thuế: {currentWorkspace.tax_circular}
         </p>
       ) : null}
-      <nav className="tabbar">
+      {children}
+      {/* Tab bar nổi ở dưới kiểu iOS 27 Liquid Glass — giống bản demo trên Muse. */}
+      <nav className="tabbar" aria-label="Điều hướng chính">
         {NAV.map((n) => (
-          <Link key={n.href} href={n.href} className={pathname === n.href ? 'tab-active' : ''}>{n.label}</Link>
+          <Link key={n.href} href={n.href} className={pathname === n.href ? 'tab-active' : ''}>
+            <span className="tab-icon" aria-hidden="true">{n.icon}</span>
+            <span className="tab-label">{n.label}</span>
+          </Link>
         ))}
       </nav>
-      {children}
+      <div className="tabbar-spacer" aria-hidden="true" />
     </div>
   );
 }

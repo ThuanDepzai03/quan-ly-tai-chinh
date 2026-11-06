@@ -6,7 +6,9 @@
 * { box-sizing: border-box; }
 body {
   margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
-  background: linear-gradient(135deg, #020617 0%, #0a2a6b 35%, #0369a1 65%, #0891b2 100%);
+  /* Nền tối iOS 27 Liquid Glass cho các trang trong — giống bản demo.
+     Trang chủ (/) tự phủ nền xanh blur riêng qua .home, không dùng nền này. */
+  background: linear-gradient(180deg, #070a14 0%, #0b0e1a 45%, #0d1526 100%);
   background-attachment: fixed;
   color: var(--text); min-height: 100vh;
 }
@@ -16,8 +18,9 @@ h2 { font-size: 19px; }
 .muted { color: var(--muted); }
 .error { color: var(--red); font-weight: 600; margin: 4px 0; }
 .glass {
-  background: var(--card); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  background: var(--card); backdrop-filter: blur(20px) saturate(1.4); -webkit-backdrop-filter: blur(20px) saturate(1.4);
   border: 1px solid rgba(255, 255, 255, 0.14); border-radius: var(--radius); padding: 20px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.28);
 }
 button {
   border-radius: 999px; border: 0; padding: 12px 20px; background: var(--accent);
@@ -54,15 +57,29 @@ select option { color: #101828; background: #fff; }
 .variant-row { display: grid; grid-template-columns: 1.2fr 0.8fr 0.8fr 0.6fr 1.4fr auto; gap: 8px; align-items: center; }
 @media (max-width: 700px) { .variant-row { grid-template-columns: 1fr 1fr; } }
 .app-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+/* ---- Tab bar nổi ở dưới kiểu iOS 27 Liquid Glass — giống bản demo ---- */
+.app-shell { padding-bottom: 8px; }
+.tabbar-spacer { height: 96px; }
 .tabbar {
-  display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0;
-  background: rgba(255, 255, 255, 0.07); border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 999px; padding: 6px; width: fit-content; max-width: 100%;
+  position: fixed; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); left: 50%;
+  transform: translateX(-50%); z-index: 40;
+  display: flex; gap: 4px; align-items: center;
+  background: rgba(20, 26, 44, 0.82); border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px; padding: 8px; width: max-content; max-width: calc(100vw - 24px);
+  backdrop-filter: blur(24px) saturate(1.5); -webkit-backdrop-filter: blur(24px) saturate(1.5);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
 }
 .tabbar a {
-  color: var(--text); text-decoration: none; padding: 8px 16px; border-radius: 999px; font-weight: 600;
+  color: var(--muted); text-decoration: none; padding: 8px 14px; border-radius: 999px; font-weight: 600;
+  display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; line-height: 1.2;
+  white-space: nowrap;
 }
+.tabbar a .tab-icon { font-size: 20px; line-height: 1; }
 .tabbar a.tab-active { background: var(--accent); color: #fff; }
+@media (max-width: 560px) {
+  .tabbar a { padding: 8px 10px; }
+  .tabbar a .tab-label { font-size: 10px; }
+}
 .row-list { display: grid; gap: 8px; }
 .row-item {
   display: flex; justify-content: space-between; gap: 12px; align-items: center;
@@ -97,7 +114,13 @@ table.data th { color: var(--muted); font-size: 13px; }
 .toolbar input, .toolbar select { width: auto; flex: 1 1 160px; }
 
 /* ---- Trang chủ: nền xanh blur trôi nhẹ, phong cách iOS 27 Liquid Glass ---- */
-.home { position: relative; }
+/* Trang chủ là điểm khác duy nhất so với bản demo (theo yêu cầu user):
+   giữ nền xanh blur, form đăng nhập ở giữa + 5 dòng tính năng. */
+.home {
+  position: relative; min-height: 100vh;
+  background: linear-gradient(135deg, #020617 0%, #0a2a6b 35%, #0369a1 65%, #0891b2 100%);
+  margin: -20px -16px -64px; padding: 20px 16px 64px;
+}
 .home-blobs {
   position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 0;
 }
