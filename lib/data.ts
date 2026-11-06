@@ -180,7 +180,7 @@ export interface AppData {
   contributeGoal: (id: string, amount: number) => Promise<string | null>;
   deleteGoal: (id: string) => void;
   saveDebt: (input: { id?: string; name: string; kind: Debt['kind']; amount: number; paid: number; due_date?: string | null }) => Promise<string | null>;
-  payDebt: (id: string, amount: number) => Promise<string | null>;
+  payDebt: (id: string, amount: number, note?: string) => Promise<string | null>;
   deleteDebt: (id: string) => void;
   saveReminder: (input: { id?: string; title: string; amount?: number | null; next_date: string; frequency: Reminder['frequency'] }) => Promise<string | null>;
   /** Đánh dấu nhắc đã xử lý: dời sang kỳ tiếp; nếu opts.createExpense thì
@@ -766,18 +766,23 @@ function useAppDataState(): AppData {
         return update((prev) => ({ ...prev, debts: prev.debts.map((d) => (d.id === input.id ? { ...d, ...input } : d)) }),
           [cloudUpsert('debts', { ...input, workspace_id: p.currentWorkspaceId })]);
       } else {
-        const d: Debt = { id: uid(), workspace_id: p.currentWorkspaceId, ...input };
+        const d: Debt = { ...input, id: uid(), workspace_id: p.currentWorkspaceId, payment_history: [] };
         return update((prev) => ({ ...prev, debts: [...prev.debts, d] }), [cloudUpsert('debts', d as unknown as Record<string, unknown>)]);
       }
     },
-    payDebt: (id, amount) => {
+    payDebt: (id, amount, note = '') => {
       const debt = stateRef.current?.debts.find((d) => d.id === id);
       if (!debt) return Promise.resolve('Không tìm thấy khoản nợ.');
       if (amount <= 0) return Promise.resolve('Số tiền ghi nhận phải lớn hơn 0.');
-      const paid = Math.min(debt.amount, debt.paid + amount);
+      if (amount > debt.amount - debt.paid) return Promise.resolve('Số tiền vượt quá khoản còn lại.');
+      const paymentHistory = [
+        ...(debt.payment_history ?? []),
+        { id: uid(), amount, created_at: new Date().toISOString(), note: note.trim() || null },
+      ];
+      const paid = debt.paid + amount;
       return update((prev) => ({
-        ...prev, debts: prev.debts.map((d) => (d.id === id ? { ...d, paid } : d)),
-      }), [cloudUpsert('debts', { ...debt, paid })]);
+        ...prev, debts: prev.debts.map((d) => (d.id === id ? { ...d, paid, payment_history: paymentHistory } : d)),
+      }), [cloudUpsert('debts', { ...debt, paid, payment_history: paymentHistory })]);
     },
     deleteDebt: (id) => update((p) => ({ ...p, debts: p.debts.filter((d) => d.id !== id) }), [cloudDelete('debts', id)]),
     saveReminder: (input) => {

@@ -90,7 +90,8 @@ create table if not exists debts (
   kind text not null check (kind in ('borrow','lend')),
   amount numeric not null,
   paid numeric not null default 0,
-  due_date date
+  due_date date,
+  payment_history jsonb not null default '[]'::jsonb
 );
 create table if not exists reminders (
   id uuid primary key default gen_random_uuid(),
@@ -254,7 +255,8 @@ alter table debts
   add column if not exists kind text not null default 'borrow',
   add column if not exists amount numeric not null default 0,
   add column if not exists paid numeric not null default 0,
-  add column if not exists due_date date;
+  add column if not exists due_date date,
+  add column if not exists payment_history jsonb not null default '[]'::jsonb;
 alter table reminders
   add column if not exists workspace_id uuid references workspaces(id) on delete cascade,
   add column if not exists title text not null default 'Nhắc việc mới',

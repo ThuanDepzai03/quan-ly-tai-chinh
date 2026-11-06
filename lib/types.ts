@@ -46,9 +46,12 @@ export interface Goal {
   id: string; workspace_id: string; name: string; target: number;
   saved: number; deadline?: string | null;
 }
+export interface DebtPayment {
+  id: string; amount: number; created_at: string; note?: string | null;
+}
 export interface Debt {
   id: string; workspace_id: string; name: string; kind: DebtKind;
-  amount: number; paid: number; due_date?: string | null;
+  amount: number; paid: number; due_date?: string | null; payment_history?: DebtPayment[];
 }
 export interface Reminder {
   id: string; workspace_id: string; title: string; amount?: number | null;

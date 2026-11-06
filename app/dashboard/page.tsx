@@ -256,6 +256,28 @@ export default function Dashboard() {
                       {d.due_date ? ` · Hạn ${fmtDate(d.due_date)}` : ''}
                     </div>
                     <div>{fmtVND(d.paid)} / {fmtVND(d.amount)} <span className="sub">· Còn {fmtVND(Math.max(0, d.amount - d.paid))}</span></div>
+                    {d.payment_history?.length ? (
+                      <details style={{ marginTop: 6 }}>
+                        <summary className="muted" style={{ cursor: 'pointer' }}>
+                          Lịch sử {d.kind === 'borrow' ? 'trả nợ' : 'thu nợ'} ({d.payment_history.length})
+                        </summary>
+                        <div className="row-list" style={{ marginTop: 6 }}>
+                          {[...d.payment_history].reverse().map((payment) => (
+                            <div key={payment.id} className="row-item">
+                              <div>
+                                <b>{fmtVND(payment.amount)}</b>
+                                <div className="sub">
+                                  {new Date(payment.created_at).toLocaleString('vi-VN')}
+                                  {payment.note ? ` · ${payment.note}` : ' · Không có ghi chú'}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    ) : d.paid > 0 ? (
+                      <div className="sub">Số đã ghi trước đây; chưa có lịch sử chi tiết.</div>
+                    ) : null}
                   </div>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     {d.paid < d.amount ? (
@@ -272,6 +294,12 @@ export default function Dashboard() {
               ))}
             </div>
           )}
+          {debts.length > 0 ? (
+            <button type="button" className="btn-ghost btn-small" style={{ marginTop: 10 }}
+              disabled={!data.currentWorkspace} onClick={() => setDebtEditor('new')}>
+              + Thêm khoản nợ khác
+            </button>
+          ) : null}
           <p className="muted" style={{ fontSize: 12 }}>Theo dõi công nợ, không tự động cộng/trừ số dư ví.</p>
         </GlassCard>
       </div>
@@ -313,8 +341,9 @@ export default function Dashboard() {
           title={`${debtPayment.kind === 'borrow' ? 'Ghi trả nợ' : 'Ghi thu nợ'}: ${debtPayment.name}`}
           actionLabel={debtPayment.kind === 'borrow' ? 'Xác nhận đã trả' : 'Xác nhận đã thu'}
           maxAmount={Math.max(0, debtPayment.amount - debtPayment.paid)}
+          noteLabel="Ghi chú (không bắt buộc)"
           onClose={() => setDebtPayment(null)}
-          onSubmit={(amount) => data.payDebt(debtPayment.id, amount)}
+          onSubmit={(amount, note) => data.payDebt(debtPayment.id, amount, note)}
         />
       ) : null}
       {confirmDeleteTx ? (
@@ -396,7 +425,6 @@ function DebtFormModal({ debt, onClose, onSaved }: {
   const [name, setName] = useState(debt?.name ?? '');
   const [kind, setKind] = useState<Debt['kind']>(debt?.kind ?? 'borrow');
   const [amount, setAmount] = useState(debt ? String(debt.amount) : '');
-  const [paid, setPaid] = useState(debt ? String(debt.paid) : '0');
   const [dueDate, setDueDate] = useState(debt?.due_date ?? '');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -404,11 +432,10 @@ function DebtFormModal({ debt, onClose, onSaved }: {
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     const amountValue = Number(amount);
-    const paidValue = Number(paid);
     if (!name.trim()) { setError('Vui lòng nhập tên khoản nợ hoặc đối tác.'); return; }
     if (!Number.isFinite(amountValue) || amountValue <= 0) { setError('Tổng số tiền phải lớn hơn 0.'); return; }
-    if (!Number.isFinite(paidValue) || paidValue < 0 || paidValue > amountValue) {
-      setError('Số đã trả/thu phải từ 0 đến tổng số tiền.');
+    if (debt && amountValue < debt.paid) {
+      setError(`Tổng số tiền không thể thấp hơn số đã trả/thu (${fmtVND(debt.paid)}).`);
       return;
     }
     setSaving(true);
@@ -416,7 +443,7 @@ function DebtFormModal({ debt, onClose, onSaved }: {
     try {
       const result = await data.saveDebt({
         id: debt?.id, name: name.trim(), kind,
-        amount: amountValue, paid: paidValue, due_date: dueDate || null,
+        amount: amountValue, paid: debt?.paid ?? 0, due_date: dueDate || null,
       });
       if (result) { setError(result); return; }
       onSaved();
@@ -442,9 +469,9 @@ function DebtFormModal({ debt, onClose, onSaved }: {
         <Field label="Tổng số tiền (đ)">
           <input type="number" min={1} value={amount} onChange={(event) => setAmount(event.target.value)} required />
         </Field>
-        <Field label="Đã trả / đã thu (đ)">
-          <input type="number" min={0} value={paid} onChange={(event) => setPaid(event.target.value)} required />
-        </Field>
+        {debt ? (
+          <p className="muted">Đã ghi nhận: <b>{fmtVND(debt.paid)}</b>. Dùng nút ghi trả/thu ở danh sách để lưu từng lần kèm ngày giờ và ghi chú.</p>
+        ) : null}
         <Field label="Ngày đến hạn (không bắt buộc)">
           <input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
         </Field>
@@ -459,14 +486,16 @@ function DebtFormModal({ debt, onClose, onSaved }: {
   );
 }
 
-function AmountActionModal({ title, actionLabel, maxAmount, onClose, onSubmit }: {
+function AmountActionModal({ title, actionLabel, maxAmount, noteLabel, onClose, onSubmit }: {
   title: string;
   actionLabel: string;
   maxAmount?: number;
+  noteLabel?: string;
   onClose: () => void;
-  onSubmit: (amount: number) => Promise<string | null>;
+  onSubmit: (amount: number, note?: string) => Promise<string | null>;
 }) {
   const [amount, setAmount] = useState('');
+  const [note, setNote] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -481,7 +510,7 @@ function AmountActionModal({ title, actionLabel, maxAmount, onClose, onSubmit }:
     setSaving(true);
     setError('');
     try {
-      const result = await onSubmit(value);
+      const result = await onSubmit(value, note);
       if (result) { setError(result); return; }
       onClose();
     } catch (reason) {
@@ -498,6 +527,11 @@ function AmountActionModal({ title, actionLabel, maxAmount, onClose, onSubmit }:
         <Field label="Số tiền (đ)">
           <input type="number" min={1} max={maxAmount} value={amount} onChange={(event) => setAmount(event.target.value)} required autoFocus />
         </Field>
+        {noteLabel ? (
+          <Field label={noteLabel}>
+            <input value={note} onChange={(event) => setNote(event.target.value)} placeholder="VD: Chuyển khoản, thu tiền mặt…" />
+          </Field>
+        ) : null}
         {error ? <p className="error">{error}</p> : null}
         <div className="flex-row">
           <button type="submit" disabled={saving}>{saving ? 'Đang lưu…' : actionLabel}</button>
