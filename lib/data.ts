@@ -127,7 +127,7 @@ export interface AppData {
   saveMember: (input: { id?: string; email: string; name: string; role: Member['role'] }) => void;
   deleteMember: (id: string) => string | null;
   deleteWorkspace: (id: string) => string | null;
-  saveWallet: (input: { id?: string; name: string; type: Wallet['type']; balance: number }) => void;
+  saveWallet: (input: { id?: string; name: string; type: Wallet['type']; balance: number }) => Promise<string | null>;
   deleteWallet: (id: string) => void;
   saveCategory: (input: { id?: string; name: string; kind: 'income' | 'expense'; color: string; icon: string }) => void;
   deleteCategory: (id: string) => void;
@@ -480,15 +480,33 @@ export function useAppData(): AppData {
       }), [cloudDelete('workspaces', id)]);
       return null;
     },
-    saveWallet: (input) => {
-      const p = stateRef.current; if (!p || !p.currentWorkspaceId) return;
+    saveWallet: async (input) => {
+      const p = stateRef.current;
+      if (!p?.currentWorkspaceId) return 'Bạn cần tạo hoặc chọn không gian làm việc trước khi thêm ví.';
+      let wallet: Wallet;
       if (input.id) {
-        update((prev) => ({ ...prev, wallets: prev.wallets.map((w) => (w.id === input.id ? { ...w, ...input } : w)) }),
-          [cloudUpsert('wallets', { ...input, workspace_id: p.currentWorkspaceId })]);
+        const existing = p.wallets.find((w) => w.id === input.id);
+        if (!existing) return 'Không tìm thấy ví cần cập nhật.';
+        wallet = { ...existing, ...input };
       } else {
-        const w: Wallet = { id: uid(), workspace_id: p.currentWorkspaceId, name: input.name, type: input.type, balance: input.balance, currency: 'VND' };
-        update((prev) => ({ ...prev, wallets: [...prev.wallets, w] }), [cloudUpsert('wallets', w as unknown as Record<string, unknown>)]);
+        wallet = {
+          id: uid(), workspace_id: p.currentWorkspaceId, name: input.name,
+          type: input.type, balance: input.balance, currency: 'VND',
+        };
       }
+      if (modeRef.current === 'cloud') {
+        const sb = createClient();
+        if (!sb) return 'Chưa cấu hình kết nối Supabase.';
+        const { error } = await sb.from('wallets').upsert(wallet);
+        if (error) return `Không lưu được ví lên Supabase: ${error.message}`;
+      }
+      update((prev) => ({
+        ...prev,
+        wallets: input.id
+          ? prev.wallets.map((w) => (w.id === input.id ? wallet : w))
+          : [...prev.wallets, wallet],
+      }));
+      return null;
     },
     deleteWallet: (id) => {
       const txIds = (stateRef.current?.transactions ?? []).filter((t) => t.wallet_id === id).map((t) => t.id);

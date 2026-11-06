@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import AppShell from '@/components/AppShell';
 import GlassCard, { Modal } from '@/components/GlassCard';
@@ -125,9 +126,17 @@ export default function Dashboard() {
       ) : null}
 
       <GlassCard title="Ví / Tài khoản" action={
-        <button className="btn-small" onClick={() => { setEditWallet(null); setShowWallet(true); }}>+ Thêm ví</button>
+        <button
+          className="btn-small"
+          disabled={!data.currentWorkspace}
+          onClick={() => { setEditWallet(null); setShowWallet(true); }}
+        >+ Thêm ví</button>
       }>
-        {wallets.length === 0 ? <p className="muted">Chưa có ví nào.</p> : (
+        {!data.currentWorkspace ? (
+          <p className="muted">
+            Cần tạo không gian làm việc trước khi thêm ví. Vào <Link href="/cai-dat">Cài đặt → Tạo không gian mới</Link>.
+          </p>
+        ) : wallets.length === 0 ? <p className="muted">Chưa có ví nào.</p> : (
           <div className="row-list">
             {wallets.map((w) => (
               <div key={w.id} className="row-item">

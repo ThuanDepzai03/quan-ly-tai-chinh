@@ -16,13 +16,19 @@ export default function WalletForm({ editing, onDone }: {
   const [balance, setBalance] = useState(String(editing?.balance ?? 0));
   const [err, setErr] = useState('');
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) { setErr('Vui lòng nhập tên ví.'); return; }
     const bal = Number(balance);
     if (Number.isNaN(bal)) { setErr('Số dư phải là số.'); return; }
-    saveWallet({ id: editing?.id, name: name.trim(), type, balance: bal });
-    onDone();
+    setErr('');
+    try {
+      const error = await saveWallet({ id: editing?.id, name: name.trim(), type, balance: bal });
+      if (error) { setErr(error); return; }
+      onDone();
+    } catch (error) {
+      setErr(`Không lưu được ví: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   return (
