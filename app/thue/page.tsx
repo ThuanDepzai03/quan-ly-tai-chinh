@@ -59,10 +59,10 @@ export default function Thue() {
   const yearRevenue = txs.filter((t) => t.type === 'income' && t.date.startsWith(String(now.getFullYear())))
     .reduce((s, t) => s + t.amount, 0);
 
-  function exportBooksXLSX() {
+  async function exportBooksXLSX() {
     const sales = txs.filter((t) => t.type === 'income');
     const goods = txs.filter((t) => t.type === 'expense');
-    downloadXLSX(`so-ke-toan-TT88-${periodKey.replace('/', '-')}.xlsx`, [
+    await downloadXLSX(`so-ke-toan-TT88-${periodKey.replace('/', '-')}.xlsx`, [
       {
         name: 'S1-HKD Doanh thu',
         rows: sales.map((t) => ({

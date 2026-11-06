@@ -1,5 +1,3 @@
-import * as XLSX from 'xlsx';
-
 export const fmtVND = (n: number): string =>
   new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(Math.round(n));
 
@@ -87,13 +85,15 @@ export function downloadCSV(filename: string, rows: Array<Record<string, string 
 export function downloadXLSX(
   filename: string,
   sheets: Array<{ name: string; rows: Array<Record<string, string | number | null | undefined>> }>,
-): void {
-  const wb = XLSX.utils.book_new();
-  for (const sheet of sheets) {
-    const ws = XLSX.utils.json_to_sheet(sheet.rows.length > 0 ? sheet.rows : [{ 'Không có dữ liệu': '' }]);
-    XLSX.utils.book_append_sheet(wb, ws, sheet.name.slice(0, 31));
-  }
-  XLSX.writeFile(wb, filename);
+): Promise<void> {
+  return import('xlsx').then((XLSX) => {
+    const wb = XLSX.utils.book_new();
+    for (const sheet of sheets) {
+      const ws = XLSX.utils.json_to_sheet(sheet.rows.length > 0 ? sheet.rows : [{ 'Không có dữ liệu': '' }]);
+      XLSX.utils.book_append_sheet(wb, ws, sheet.name.slice(0, 31));
+    }
+    XLSX.writeFile(wb, filename);
+  });
 }
 
 /** Nhóm giao dịch theo tháng YYYY-MM, trả về map tháng -> mảng giao dịch. */

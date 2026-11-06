@@ -113,7 +113,7 @@ export default function ProductForm({ state, editing, onDone }: {
           </label>
           {image ? <button type="button" className="btn-ghost" onClick={() => setImage(null)}>Gỡ ảnh</button> : null}
         </div>
-        {image ? <img src={image} alt="Ảnh sản phẩm" style={{ maxWidth: '100%', maxHeight: 160, objectFit: 'contain', borderRadius: 12, marginTop: 8 }} /> : null}
+        {image ? <img src={image} alt="Ảnh sản phẩm" decoding="async" style={{ maxWidth: '100%', maxHeight: 160, objectFit: 'contain', borderRadius: 12, marginTop: 8 }} /> : null}
       </Field>
 
       {enabledFields.length > 0 ? (

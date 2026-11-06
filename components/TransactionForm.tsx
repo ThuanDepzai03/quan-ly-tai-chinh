@@ -206,7 +206,7 @@ export default function TransactionForm({ state, onDone }: {
           ) : null}
         </div>
         {scanMsg ? <p className="muted" style={{ fontSize: 13 }}>{scanMsg}</p> : null}
-        {receiptImage ? <img src={receiptImage} alt="Hóa đơn đính kèm" style={{ maxWidth: '100%', maxHeight: 180, objectFit: 'contain', borderRadius: 12, marginTop: 8 }} /> : null}
+        {receiptImage ? <img src={receiptImage} alt="Hóa đơn đính kèm" decoding="async" style={{ maxWidth: '100%', maxHeight: 180, objectFit: 'contain', borderRadius: 12, marginTop: 8 }} /> : null}
       </fieldset>
       {err ? <p className="error">{err}</p> : null}
       <button type="submit">Lưu giao dịch</button>

@@ -103,7 +103,15 @@ export default function Kho() {
               return (
                 <div key={p.id} className="row-item" style={{ alignItems: 'flex-start' }}>
                   {p.image ? (
-                    <img src={p.image} alt={p.name} style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 12, flexShrink: 0 }} />
+                    <img
+                      src={p.image}
+                      alt={p.name}
+                      width={56}
+                      height={56}
+                      loading="lazy"
+                      decoding="async"
+                      style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 12, flexShrink: 0 }}
+                    />
                   ) : null}
                   <div style={{ flex: 1 }}>
                     <b>{p.name}</b>{' '}

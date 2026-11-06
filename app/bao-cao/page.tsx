@@ -88,8 +88,8 @@ export default function BaoCao() {
     downloadCSV(`bao-cao-${month}.csv`, txRows());
   }
 
-  function exportXLSX() {
-    downloadXLSX(`bao-cao-${month}.xlsx`, [
+  async function exportXLSX() {
+    await downloadXLSX(`bao-cao-${month}.xlsx`, [
       { name: 'Tong hop', rows: [{ 'Tháng': month, 'Tổng thu': income, 'Tổng chi': expense, 'Lãi bán hàng': profit, 'VAT khoán 1%': tax.vat, 'TNCN khoán 0,5%': tax.tncn, 'Tổng thuế khoán': tax.total }] },
       { name: 'Giao dich', rows: txRows() },
       {

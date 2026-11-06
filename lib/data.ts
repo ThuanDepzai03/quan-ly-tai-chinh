@@ -234,37 +234,42 @@ export function useAppData(): AppData {
         try {
           // user ở đây chính là user đã đồng bộ từ Supabase session ở trên.
           const cloudUser: AppUser = user;
-            const loaded: Partial<AppState> = { user: cloudUser };
-            for (const table of TABLES) {
-              const { data } = await sb.from(table).select('*');
-              const key = (Object.keys(STATE_TO_TABLE).find((k) => STATE_TO_TABLE[k] === table) ?? table) as keyof AppState;
-              (loaded as unknown as Record<string, unknown>)[key] = (data ?? []) as unknown;
-            }
-            if (!cancelled) {
-              const wsList = (loaded.workspaces ?? []) as Workspace[];
-              const full: AppState = {
-                user: cloudUser, workspaces: wsList,
-                currentWorkspaceId: wsList[0]?.id ?? null,
-                members: (loaded.members ?? []) as Member[],
-                wallets: (loaded.wallets ?? []) as Wallet[],
-                categories: (loaded.categories ?? []) as Category[],
-                transactions: (loaded.transactions ?? []) as Transaction[],
-                budgets: (loaded.budgets ?? []) as Budget[],
-                goals: (loaded.goals ?? []) as Goal[],
-                debts: (loaded.debts ?? []) as Debt[],
-                reminders: (loaded.reminders ?? []) as Reminder[],
-                products: (loaded.products ?? []) as Product[],
-                productCategories: (loaded.productCategories ?? []) as ProductCategory[],
-                productVariants: (loaded.productVariants ?? []) as ProductVariant[],
-                productFields: (loaded.productFields ?? []) as ProductField[],
-                stockMovements: (loaded.stockMovements ?? []) as StockMovement[],
-                taxPayments: (loaded.taxPayments ?? []) as TaxPayment[],
-              };
-              setMode('cloud');
-              setState(full);
-              setLoading(false);
-              return;
-            }
+          const results = await Promise.all(
+            TABLES.map(async (table) => ({
+              table,
+              data: (await sb.from(table).select('*')).data ?? [],
+            })),
+          );
+          const loaded: Partial<AppState> = { user: cloudUser };
+          for (const { table, data } of results) {
+            const key = (Object.keys(STATE_TO_TABLE).find((k) => STATE_TO_TABLE[k] === table) ?? table) as keyof AppState;
+            (loaded as unknown as Record<string, unknown>)[key] = data as unknown;
+          }
+          if (!cancelled) {
+            const wsList = (loaded.workspaces ?? []) as Workspace[];
+            const full: AppState = {
+              user: cloudUser, workspaces: wsList,
+              currentWorkspaceId: wsList[0]?.id ?? null,
+              members: (loaded.members ?? []) as Member[],
+              wallets: (loaded.wallets ?? []) as Wallet[],
+              categories: (loaded.categories ?? []) as Category[],
+              transactions: (loaded.transactions ?? []) as Transaction[],
+              budgets: (loaded.budgets ?? []) as Budget[],
+              goals: (loaded.goals ?? []) as Goal[],
+              debts: (loaded.debts ?? []) as Debt[],
+              reminders: (loaded.reminders ?? []) as Reminder[],
+              products: (loaded.products ?? []) as Product[],
+              productCategories: (loaded.productCategories ?? []) as ProductCategory[],
+              productVariants: (loaded.productVariants ?? []) as ProductVariant[],
+              productFields: (loaded.productFields ?? []) as ProductField[],
+              stockMovements: (loaded.stockMovements ?? []) as StockMovement[],
+              taxPayments: (loaded.taxPayments ?? []) as TaxPayment[],
+            };
+            setMode('cloud');
+            setState(full);
+            setLoading(false);
+            return;
+          }
         } catch { /* rơi xuống bản local */ }
       }
       if (!cancelled) {
