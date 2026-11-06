@@ -47,7 +47,7 @@ export default function Home() {
             ))}
           </ul>
           <p className="muted" style={{ fontSize: 13, marginTop: 16 }}>
-            Tài khoản demo: <b style={{ color: 'var(--text)' }}>demo@quanlytaichinh.vn / 123456</b> — chỉ dùng ở bản demo.
+            Phần thuế của ứng dụng ở mức<b style={{ color: 'var(--text)' }}>đảm bảo về hình thức tuân thủ</b>cho hộ kinh doanh nhỏ theo phương pháp trực tiếp: đúng khung TT88/2021, đủ bộ sổ, xuất được file. Tuy nhiên, để thực sự an tâm khi quyết toán, bạn nên kiểm tra lại tỷ lệ % áp cho đúng ngành nghề của mình và đối chiếu số liệu với thông báo thuế của Chi cục Thuế địa phương.
           </p>
         </section>
       </div>
