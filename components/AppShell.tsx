@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useAppData } from '@/lib/data';
@@ -20,6 +20,7 @@ const NAV = [
 export default function AppShell({ children }: { children: ReactNode }) {
   const { state, loading, switchWorkspace, currentWorkspace } = useAppData();
   const pathname = usePathname();
+  const router = useRouter();
   const [pinLocked, setPinLocked] = useState(false);
   const [pinInput, setPinInput] = useState('');
   const [pinErr, setPinErr] = useState('');
@@ -101,7 +102,25 @@ export default function AppShell({ children }: { children: ReactNode }) {
       {children}
       {/* Tab bar nổi ở dưới kiểu iOS 27 Liquid Glass — giống bản demo trên Muse. */}
       <nav className="tabbar" aria-label="Điều hướng chính">
-        {NAV.map((n) => (
+        {NAV.slice(0, 2).map((n) => (
+          <Link key={n.href} href={n.href} className={pathname === n.href ? 'tab-active' : ''}>
+            <span className="tab-icon" aria-hidden="true">{n.icon}</span>
+            <span className="tab-label">{n.label}</span>
+          </Link>
+        ))}
+        <button
+          type="button"
+          className="tabbar-add"
+          aria-label="Thêm giao dịch"
+          onClick={() => {
+            if (pathname === '/dashboard') {
+              window.dispatchEvent(new Event('qltc:add-transaction'));
+            } else {
+              router.push('/dashboard?add=1');
+            }
+          }}
+        >+</button>
+        {NAV.slice(2).map((n) => (
           <Link key={n.href} href={n.href} className={pathname === n.href ? 'tab-active' : ''}>
             <span className="tab-icon" aria-hidden="true">{n.icon}</span>
             <span className="tab-label">{n.label}</span>

@@ -1,23 +1,44 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import AppShell from '@/components/AppShell';
-import GlassCard, { Modal, StatCard } from '@/components/GlassCard';
+import GlassCard, { Modal } from '@/components/GlassCard';
 import TransactionForm from '@/components/TransactionForm';
 import WalletForm from '@/components/WalletForm';
 import { useAppData } from '@/lib/data';
 import { fmtDate, fmtVND, monthISO, tax88 } from '@/lib/utils';
 import { WALLET_TYPE_LABELS } from '@/lib/types';
-import type { Wallet } from '@/lib/types';
+import type { TxType, Wallet } from '@/lib/types';
 
 export default function Dashboard() {
+  const router = useRouter();
   const data = useAppData();
   const { state } = data;
   const [showTx, setShowTx] = useState(false);
+  const [txType, setTxType] = useState<TxType>('income');
   const [showWallet, setShowWallet] = useState(false);
   const [editWallet, setEditWallet] = useState<Wallet | null>(null);
   const [confirmDeleteTx, setConfirmDeleteTx] = useState<string | null>(null);
   const [sampleMsg, setSampleMsg] = useState('');
   const [sampleBusy, setSampleBusy] = useState(false);
+
+  useEffect(() => {
+    const openTransaction = () => {
+      setTxType('income');
+      setShowTx(true);
+    };
+    window.addEventListener('qltc:add-transaction', openTransaction);
+    if (new URLSearchParams(window.location.search).has('add')) {
+      openTransaction();
+      router.replace('/dashboard', { scroll: false });
+    }
+    return () => window.removeEventListener('qltc:add-transaction', openTransaction);
+  }, [router]);
+
+  function openTransaction(type: TxType) {
+    setTxType(type);
+    setShowTx(true);
+  }
 
   async function loadSample() {
     if (hasData && !confirm('Đã có dữ liệu — nạp dữ liệu mẫu sẽ THAY THẾ toàn bộ dữ liệu hiện tại của không gian này. Tiếp tục?')) return;
@@ -49,9 +70,10 @@ export default function Dashboard() {
     [state, wsId, month]);
   const income = monthTxs.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0);
   const expense = monthTxs.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
-  const profit = monthTxs.reduce((s, t) => s + (t.profit ?? 0), 0);
   const totalBalance = wallets.reduce((s, w) => s + w.balance, 0);
+  const netCashflow = income - expense;
   const tax = tax88(income);
+  const today = new Date().toISOString().slice(0, 10);
   const budgets = useMemo(
     () => (state?.budgets ?? []).filter((b) => b.workspace_id === wsId && b.month === month),
     [state, wsId, month]);
@@ -70,12 +92,29 @@ export default function Dashboard() {
 
   return (
     <AppShell>
-      <div className="flex-row">
-        <StatCard label="Tổng số dư" value={fmtVND(totalBalance)} sub={`${wallets.length} ví`} />
-        <StatCard label={`Thu tháng ${month}`} value={fmtVND(income)} sub="Theo giao dịch đã ghi" />
-        <StatCard label={`Chi tháng ${month}`} value={fmtVND(expense)} sub="Theo giao dịch đã ghi" />
-        <StatCard label="Lãi bán hàng tháng này" value={fmtVND(profit)} sub="Doanh thu − Giá vốn" />
-        <StatCard label="Thuế TT88 ước tính" value={fmtVND(tax.total)} sub={`VAT ${fmtVND(tax.vat)} + TNCN ${fmtVND(tax.tncn)}`} />
+      <section className="balance-hero">
+        <div className="balance-label">Tổng số dư · {wallets.length} ví</div>
+        <div className="balance-total">{fmtVND(totalBalance)}</div>
+        <div className="balance-breakdown">
+          <div><span>↓ Thu tháng này</span><strong>{fmtVND(income)}</strong></div>
+          <div><span>↑ Chi tháng này</span><strong>{fmtVND(expense)}</strong></div>
+          <div><span>Dòng tiền ròng</span><strong>{netCashflow >= 0 ? '+' : '−'}{fmtVND(Math.abs(netCashflow))}</strong></div>
+        </div>
+      </section>
+
+      <div className="quick-actions" aria-label="Thêm nhanh giao dịch">
+        <button className="quick-action" onClick={() => openTransaction('income')}>
+          <span className="quick-action-icon income-icon">↓</span><b>Ghi thu</b>
+        </button>
+        <button className="quick-action" onClick={() => openTransaction('expense')}>
+          <span className="quick-action-icon expense-icon">↑</span><b>Ghi chi</b>
+        </button>
+        <button className="quick-action" onClick={() => openTransaction('transfer')}>
+          <span className="quick-action-icon transfer-icon">⇄</span><b>Chuyển ví</b>
+        </button>
+        <button className="quick-action" onClick={() => openTransaction('expense')}>
+          <span className="quick-action-icon scan-icon">▣</span><b>Quét hóa đơn</b>
+        </button>
       </div>
 
       {sampleMsg ? <p className="glass" style={{ padding: '12px 20px' }}>{sampleMsg}</p> : null}
@@ -96,6 +135,32 @@ export default function Dashboard() {
             : 'Tài khoản đang trống. Bấm “Tải dữ liệu mẫu” để nạp đúng dữ liệu mẫu hộ kinh doanh như bản demo: 4 ví 176.610.000đ, 39 giao dịch 8–11/2026, 11 sản phẩm kho, ngân sách, mục tiêu, nợ vay, nhắc nhở, thuế TT88.'}
         </p>
       </GlassCard>
+
+      {reminders.length > 0 ? (
+        <section className="dashboard-reminders">
+          <h2>Cần chú ý</h2>
+          {reminders.map((r) => {
+            const overdue = r.next_date < today;
+            return (
+              <div className="dashboard-reminder" key={r.id}>
+                <span className={overdue ? 'reminder-clock overdue' : 'reminder-clock'} aria-hidden="true">◷</span>
+                <div>
+                  <b>{r.title}{overdue ? ' — quá hạn' : ''}</b>
+                  <span>{overdue ? ` (${fmtDate(r.next_date)})` : ` · ${fmtDate(r.next_date)}`}</span>
+                </div>
+                {r.amount ? <strong>{fmtVND(r.amount)}</strong> : null}
+                <button className="btn-ghost btn-small" onClick={() => {
+                  let createExpense = false;
+                  if (r.amount && r.amount > 0 && wallets.length > 0) {
+                    createExpense = confirm(`Đánh dấu "${r.title}" đã xử lý và ghi thêm 1 giao dịch Chi ${fmtVND(r.amount)} vào ví ${wallets[0].name}?\n\nBấm OK = ghi Chi + dời sang kỳ tiếp.\nBấm Hủy = chỉ dời sang kỳ tiếp, không ghi Chi.`);
+                  }
+                  data.completeReminder(r.id, { createExpense, walletId: wallets[0]?.id ?? null });
+                }}>Xong</button>
+              </div>
+            );
+          })}
+        </section>
+      ) : null}
 
       <GlassCard title="Ví / Tài khoản" action={
         <button className="btn-small" onClick={() => { setEditWallet(null); setShowWallet(true); }}>+ Thêm ví</button>
@@ -198,32 +263,11 @@ export default function Dashboard() {
             </div>
           )}
         </GlassCard>
-        <GlassCard title="Nhắc nhở sắp tới">
-          {reminders.length === 0 ? <p className="muted">Không có nhắc nhở.</p> : (
-            <div className="row-list">
-              {reminders.map((r) => (
-                <div key={r.id} className="row-item">
-                  <div><b>{r.title}</b><div className="sub">{fmtDate(r.next_date)} • {r.frequency}</div></div>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <span>{r.amount ? fmtVND(r.amount) : ''}</span>
-                    <button className="btn-ghost btn-small" onClick={() => {
-                      let createExpense = false;
-                      if (r.amount && r.amount > 0 && wallets.length > 0) {
-                        createExpense = confirm(`Đánh dấu "${r.title}" đã xử lý và ghi thêm 1 giao dịch Chi ${fmtVND(r.amount)} vào ví ${wallets[0].name}?\n\nBấm OK = ghi Chi + dời sang kỳ tiếp.\nBấm Hủy = chỉ dời sang kỳ tiếp, không ghi Chi.`);
-                      }
-                      data.completeReminder(r.id, { createExpense, walletId: wallets[0]?.id ?? null });
-                    }}>Xong</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </GlassCard>
       </div>
 
       {showTx && state ? (
-        <Modal title="Thêm giao dịch" onClose={() => setShowTx(false)}>
-          <TransactionForm state={state} onDone={() => setShowTx(false)} />
+        <Modal title="Thêm giao dịch" className="transaction-modal" onClose={() => setShowTx(false)}>
+          <TransactionForm key={txType} state={state} initialType={txType} onDone={() => setShowTx(false)} />
         </Modal>
       ) : null}
       {showWallet ? (

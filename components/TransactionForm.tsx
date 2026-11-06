@@ -7,8 +7,8 @@ import { fmtVND, profitOf, todayISO } from '@/lib/utils';
 import { fileToBase64, scanReceipt } from '@/lib/receipt';
 import { Field } from './GlassCard';
 
-export default function TransactionForm({ state, onDone }: {
-  state: AppState; onDone: () => void;
+export default function TransactionForm({ state, onDone, initialType = 'income' }: {
+  state: AppState; onDone: () => void; initialType?: TxType;
 }) {
   const { addTransaction } = useAppData();
   const wsId = state.currentWorkspaceId;
@@ -16,7 +16,7 @@ export default function TransactionForm({ state, onDone }: {
   const categories = state.categories.filter((c) => c.workspace_id === wsId);
   const products = state.products.filter((p) => p.workspace_id === wsId);
 
-  const [type, setType] = useState<TxType>('income');
+  const [type, setType] = useState<TxType>(initialType);
   const [walletId, setWalletId] = useState(wallets[0]?.id ?? '');
   const [toWalletId, setToWalletId] = useState('');
   const [categoryId, setCategoryId] = useState('');
@@ -72,13 +72,21 @@ export default function TransactionForm({ state, onDone }: {
 
   return (
     <form onSubmit={submit} className="form-grid">
-      <Field label="Loại giao dịch">
-        <select value={type} onChange={(e) => { setType(e.target.value as TxType); setIsSale(false); }}>
-          <option value="income">Thu</option>
-          <option value="expense">Chi</option>
-          <option value="transfer">Chuyển ví</option>
-        </select>
-      </Field>
+      <div className="transaction-type-switch" role="group" aria-label="Loại giao dịch">
+        {([
+          ['expense', 'Chi tiền'],
+          ['income', 'Thu tiền'],
+          ['transfer', 'Chuyển ví'],
+        ] as const).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            className={type === value ? 'transaction-type-active' : ''}
+            aria-pressed={type === value}
+            onClick={() => { setType(value); if (value !== 'income') setIsSale(false); }}
+          >{label}</button>
+        ))}
+      </div>
       <Field label={type === 'transfer' ? 'Ví nguồn' : 'Ví'}>
         <select value={walletId} onChange={(e) => setWalletId(e.target.value)}>
           {wallets.map((w) => (
@@ -150,6 +158,13 @@ export default function TransactionForm({ state, onDone }: {
       ) : (
         <Field label="Số tiền (đ)">
           <input type="number" min={0} placeholder="VD: 500000" value={amount} onChange={(e) => setAmount(e.target.value)} required />
+          <div className="amount-shortcuts" aria-label="Gợi ý số tiền">
+            {[50000, 100000, 200000, 500000, 1000000, 5000000].map((value) => (
+              <button key={value} type="button" className="amount-shortcut" onClick={() => {
+                setAmount((current) => String((Number(current) || 0) + value));
+              }}>+{value >= 1000000 ? `${value / 1000000},0 tr` : `${value / 1000}k`}</button>
+            ))}
+          </div>
         </Field>
       )}
       <Field label="Ngày">

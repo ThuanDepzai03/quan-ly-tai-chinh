@@ -24,12 +24,12 @@ export function StatCard({ label, value, sub }: { label: string; value: string; 
   );
 }
 
-export function Modal({ title, onClose, children }: {
-  title: string; onClose: () => void; children: ReactNode;
+export function Modal({ title, onClose, children, className }: {
+  title: string; onClose: () => void; children: ReactNode; className?: string;
 }) {
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div className={`modal ${className ?? ''}`} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h2 style={{ margin: 0 }}>{title}</h2>
           <button className="btn-ghost" onClick={onClose} aria-label="Đóng">✕</button>
