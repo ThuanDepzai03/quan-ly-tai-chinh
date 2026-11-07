@@ -17,6 +17,70 @@ const NAV = [
   { href: '/cai-dat', label: 'Cài đặt', icon: '⚙️' },
 ];
 
+function SkeletonBlock({ className = '' }: { className?: string }) {
+  return <div aria-hidden="true" className={`page-skeleton-block ${className}`} />;
+}
+
+function SkeletonSection({ rows = 3 }: { rows?: number }) {
+  return (
+    <section className="glass page-skeleton-section" aria-hidden="true">
+      <div className="page-skeleton-section-heading">
+        <SkeletonBlock className="page-skeleton-title" />
+        <SkeletonBlock className="page-skeleton-action" />
+      </div>
+      <div className="page-skeleton-rows">
+        {Array.from({ length: rows }, (_, index) => (
+          <div className="page-skeleton-row" key={index}>
+            <SkeletonBlock className="page-skeleton-row-main" />
+            <SkeletonBlock className="page-skeleton-row-value" />
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function PageLoadingSkeleton({ pathname }: { pathname: string }) {
+  if (pathname === '/dashboard' || pathname === '/') {
+    return (
+      <>
+        <section className="page-skeleton-balance" aria-hidden="true">
+          <SkeletonBlock className="page-skeleton-balance-label" />
+          <SkeletonBlock className="page-skeleton-balance-total" />
+          <div className="page-skeleton-balance-grid">
+            {Array.from({ length: 4 }, (_, index) => (
+              <SkeletonBlock className="page-skeleton-balance-stat" key={index} />
+            ))}
+          </div>
+        </section>
+        <div className="page-skeleton-quick-actions" aria-hidden="true">
+          {Array.from({ length: 4 }, (_, index) => (
+            <SkeletonBlock className="page-skeleton-quick-action" key={index} />
+          ))}
+        </div>
+        <SkeletonSection rows={3} />
+        <SkeletonSection rows={4} />
+        <SkeletonSection rows={3} />
+      </>
+    );
+  }
+
+  const sectionRows: Record<string, number[]> = {
+    '/kho': [4, 4],
+    '/thue': [3, 4, 3],
+    '/bao-cao': [2, 4, 3, 3, 4],
+    '/cai-dat': [3, 3, 4, 3, 3],
+  };
+  return (
+    <>
+      <SkeletonBlock className="page-skeleton-page-title" />
+      {(sectionRows[pathname] ?? [3, 4, 3]).map((rows, index) => (
+        <SkeletonSection rows={rows} key={index} />
+      ))}
+    </>
+  );
+}
+
 /** Khung chung cho các trang đã đăng nhập: header, chuyển workspace, menu. */
 export default function AppShell({ children }: { children: ReactNode }) {
   const { state, loading, switchWorkspace, currentWorkspace, syncError, clearSyncError, retryLoad } = useAppData();
@@ -58,7 +122,29 @@ export default function AppShell({ children }: { children: ReactNode }) {
     );
   }
 
-  if (loading) return <main className="glass" role="status"><p>Đang tải dữ liệu…</p></main>;
+  if (loading) {
+    return (
+      <div className="app-shell page-skeleton" role="status" aria-label="Đang tải dữ liệu" aria-busy="true">
+        <header className="app-header page-skeleton-header" aria-hidden="true">
+          <div className="page-skeleton-brand">
+            <SkeletonBlock className="page-skeleton-brand-name" />
+            <SkeletonBlock className="page-skeleton-user" />
+          </div>
+          <div className="page-skeleton-header-actions">
+            <SkeletonBlock className="page-skeleton-workspace" />
+            <SkeletonBlock className="page-skeleton-signout" />
+          </div>
+        </header>
+        <PageLoadingSkeleton pathname={pathname} />
+        <nav className="tabbar page-skeleton-tabbar" aria-hidden="true">
+          {Array.from({ length: 5 }, (_, index) => (
+            <SkeletonBlock className="page-skeleton-tab" key={index} />
+          ))}
+        </nav>
+        <div className="tabbar-spacer" aria-hidden="true" />
+      </div>
+    );
+  }
   if (!state && syncError) {
     return (
       <main className="glass" role="alert">
