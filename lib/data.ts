@@ -88,7 +88,10 @@ function getCloudTransactionRow(row: Record<string, unknown>): Record<string, un
   if (typeof date !== 'string' || !date) {
     throw new Error('Không thể lưu giao dịch lên Supabase vì thiếu ngày giao dịch.');
   }
-  return { ...row, occurred_at: `${date}T00:00:00.000Z` };
+  return {
+    ...row,
+    occurred_at: typeof row.occurred_at === 'string' ? row.occurred_at : `${date}T00:00:00.000Z`,
+  };
 }
 
 function getCloudDebtRow(row: Record<string, unknown>): Record<string, unknown> {
@@ -647,11 +650,11 @@ function useAppDataState(): AppData {
     },
     saveCategory: (input) => {
       const p = stateRef.current; if (!p || !p.currentWorkspaceId) return Promise.resolve('Bạn cần tạo hoặc chọn không gian làm việc trước.');
-      if (input.id) {
+      if (input.id && p.categories.some((category) => category.id === input.id)) {
         return update((prev) => ({ ...prev, categories: prev.categories.map((c) => (c.id === input.id ? { ...c, ...input } : c)) }),
           [cloudUpsert('categories', { ...input, workspace_id: p.currentWorkspaceId })]);
       } else {
-        const c: Category = { id: uid(), workspace_id: p.currentWorkspaceId, ...input };
+        const c: Category = { id: input.id ?? uid(), workspace_id: p.currentWorkspaceId, ...input };
         return update((prev) => ({ ...prev, categories: [...prev.categories, c] }), [cloudUpsert('categories', c as unknown as Record<string, unknown>)]);
       }
     },
@@ -688,7 +691,8 @@ function useAppDataState(): AppData {
         product_id: input.product_id ?? null, variant_id: input.variant_id ?? null,
         imei: input.imei ?? null, quantity: input.quantity ?? 1,
         unit_price: input.unit_price ?? null, cost_price: input.cost_price ?? null,
-        profit, tax_type: input.tax_type ?? null, tax_rate: input.tax_rate ?? null, receipt_image: input.receipt_image ?? null, note: input.note ?? '', date: input.date,
+        profit, tax_type: input.tax_type ?? null, tax_rate: input.tax_rate ?? null, receipt_image: input.receipt_image ?? null, note: input.note ?? '',
+        date: input.date.slice(0, 10), occurred_at: input.occurred_at ?? new Date().toISOString(),
         created_at: new Date().toISOString(),
       };
       const movements: StockMovement[] = [];

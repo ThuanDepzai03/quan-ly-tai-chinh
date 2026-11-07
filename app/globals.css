@@ -158,7 +158,7 @@ select option { color: #101828; background: #fff; }
 }
 .balance-label { color: rgba(255,255,255,.82); font-size: 14px; font-weight: 700; }
 .balance-total { margin: 6px 0 16px; color: #fff; font-size: clamp(30px, 5vw, 42px); font-weight: 850; letter-spacing: -1px; }
-.balance-breakdown { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.balance-breakdown { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 .balance-breakdown > div {
   display: grid; gap: 5px; min-width: 0; padding: 12px 14px; border-radius: 18px;
   background: rgba(255,255,255,.18);
@@ -200,12 +200,19 @@ select option { color: #101828; background: #fff; }
 .amount-shortcuts { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 8px; }
 .amount-shortcut { padding: 8px 12px; background: rgba(255,255,255,.1); color: var(--text); font-size: 12px; }
 .amount-shortcut:hover { background: rgba(255,255,255,.18); }
+.category-select-row { display: grid; grid-template-columns: minmax(0, 1fr) 42px; gap: 8px; }
+.category-add-button { padding: 0; font-size: 23px; line-height: 1; }
+.category-create-panel {
+  display: grid; gap: 10px; padding: 12px; border: 1px solid rgba(255,255,255,.14);
+  border-radius: 16px; background: rgba(255,255,255,.05);
+}
+.category-create-actions { display: flex; justify-content: flex-end; gap: 8px; }
 @media (max-width: 560px) {
   .tabbar { gap: 1px; padding: 7px 5px; }
   .tabbar a { padding: 7px 8px; }
   .tabbar-add { width: 48px; height: 48px; flex-basis: 48px; margin: -18px 2px 0; font-size: 30px; }
   .balance-hero { padding: 18px 16px 16px; border-radius: 24px; }
-  .balance-breakdown { gap: 6px; }
+  .balance-breakdown { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
   .balance-breakdown > div { padding: 10px 8px; border-radius: 14px; }
   .balance-breakdown span { font-size: 10px; }
   .balance-breakdown strong { font-size: 12px; }

@@ -3,14 +3,14 @@ import { useMemo, useState } from 'react';
 import type { AppState, TxType } from '@/lib/types';
 import { WALLET_TYPE_LABELS } from '@/lib/types';
 import { useAppData } from '@/lib/data';
-import { fmtVND, profitOf, todayISO } from '@/lib/utils';
+import { fmtVND, localDateTimeInput, profitOf, uid } from '@/lib/utils';
 import { fileToBase64, scanReceipt } from '@/lib/receipt';
 import { Field } from './GlassCard';
 
 export default function TransactionForm({ state, onDone, initialType = 'income' }: {
   state: AppState; onDone: () => void; initialType?: TxType;
 }) {
-  const { addTransaction } = useAppData();
+  const { addTransaction, saveCategory } = useAppData();
   const wsId = state.currentWorkspaceId;
   const wallets = state.wallets.filter((w) => w.workspace_id === wsId);
   const categories = state.categories.filter((c) => c.workspace_id === wsId);
@@ -20,8 +20,11 @@ export default function TransactionForm({ state, onDone, initialType = 'income' 
   const [walletId, setWalletId] = useState(wallets[0]?.id ?? '');
   const [toWalletId, setToWalletId] = useState('');
   const [categoryId, setCategoryId] = useState('');
+  const [showCategoryForm, setShowCategoryForm] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [savingCategory, setSavingCategory] = useState(false);
   const [amount, setAmount] = useState('');
-  const [date, setDate] = useState(todayISO());
+  const [date, setDate] = useState(localDateTimeInput());
   const [note, setNote] = useState('');
   const [isSale, setIsSale] = useState(false);
   const [productId, setProductId] = useState('');
@@ -44,6 +47,28 @@ export default function TransactionForm({ state, onDone, initialType = 'income' 
   const computedProfit = isSale ? profitOf(qty, salePrice, costPrice) : null;
   const availableImeis = useMemo(() => variant?.imeis ?? [], [variant]);
   const cats = categories.filter((c) => c.kind === (type === 'income' ? 'income' : 'expense'));
+
+  async function createCategory() {
+    const name = newCategoryName.trim();
+    if (!name) { setErr('Vui lòng nhập tên danh mục.'); return; }
+    const kind = type === 'income' ? 'income' : 'expense';
+    const id = uid();
+    setSavingCategory(true);
+    setErr('');
+    try {
+      const error = await saveCategory({
+        id, name, kind, color: '#0a84ff', icon: kind === 'income' ? '💰' : '💸',
+      });
+      if (error) { setErr(error); return; }
+      setCategoryId(id);
+      setNewCategoryName('');
+      setShowCategoryForm(false);
+    } catch (error) {
+      setErr(`Không thể thêm danh mục: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setSavingCategory(false);
+    }
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -68,7 +93,7 @@ export default function TransactionForm({ state, onDone, initialType = 'income' 
         tax_type: type === 'transfer' ? null : (taxType || null),
         tax_rate: type === 'transfer' ? null : (taxRate ? Number(taxRate) : null),
         receipt_image: receiptImage,
-        note, date,
+        note, date: date.slice(0, 10), occurred_at: new Date(date).toISOString(),
       });
       if (error) { setErr(error); return; }
       onDone();
@@ -115,11 +140,33 @@ export default function TransactionForm({ state, onDone, initialType = 'income' 
       ) : null}
       {type !== 'transfer' ? (
         <Field label="Danh mục">
-          <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-            <option value="">— Không chọn —</option>
-            {cats.map((c) => (<option key={c.id} value={c.id}>{c.icon} {c.name}</option>))}
-          </select>
+          <div className="category-select-row">
+            <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+              <option value="">— Không chọn —</option>
+              {cats.map((c) => (<option key={c.id} value={c.id}>{c.icon} {c.name}</option>))}
+            </select>
+            <button type="button" className="btn-ghost category-add-button" aria-label="Thêm danh mục" title="Thêm danh mục" onClick={() => { setErr(''); setShowCategoryForm((shown) => !shown); }}>+</button>
+          </div>
         </Field>
+      ) : null}
+      {showCategoryForm && type !== 'transfer' ? (
+        <div className="category-create-panel">
+          <Field label={`Tên danh mục ${type === 'income' ? 'thu' : 'chi'}`}>
+            <input
+              autoFocus
+              value={newCategoryName}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+              placeholder="Nhập tên danh mục"
+              maxLength={60}
+            />
+          </Field>
+          <div className="category-create-actions">
+            <button type="button" className="btn-ghost" onClick={() => { setShowCategoryForm(false); setNewCategoryName(''); }}>Hủy</button>
+            <button type="button" disabled={savingCategory} onClick={() => { void createCategory(); }}>
+              {savingCategory ? 'Đang thêm…' : 'Thêm danh mục'}
+            </button>
+          </div>
+        </div>
       ) : null}
       {type === 'income' ? (
         <label className="check-row">
@@ -176,8 +223,8 @@ export default function TransactionForm({ state, onDone, initialType = 'income' 
           </div>
         </Field>
       )}
-      <Field label="Ngày">
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+      <Field label="Ngày giờ giao dịch">
+        <input type="datetime-local" step={1} value={date} onChange={(e) => setDate(e.target.value)} required />
       </Field>
       <Field label="Ghi chú">
         <input placeholder="VD: Bán cho khách Anh Tuấn" value={note} onChange={(e) => setNote(e.target.value)} />
@@ -217,7 +264,7 @@ export default function TransactionForm({ state, onDone, initialType = 'income' 
                 const scanned = await scanReceipt(f);
                 setReceiptImage(scanned.image);
                 if (scanned.amount) setAmount(String(scanned.amount));
-                if (scanned.date) setDate(scanned.date);
+                if (scanned.date) setDate(scanned.date.length > 10 ? scanned.date.slice(0, 16) : `${scanned.date}T00:00`);
                 if (scanned.note) setNote(scanned.note);
                 setScanMsg(scanned.amount
                   ? `Đã quét: số tiền ${fmtVND(scanned.amount)} — kiểm tra lại rồi bấm Lưu giao dịch.`

@@ -147,7 +147,9 @@ export const uid = (): string => {
   return `${hex()}${hex()}-4000-4000-8000-${hex()}${hex()}${hex()}`;
 };
 
-export const todayISO = (): string => new Date().toISOString().slice(0, 10);
+export const localDateTimeInput = (date = new Date()): string =>
+  new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+export const todayISO = (): string => localDateTimeInput().slice(0, 10);
 export const monthISO = (d = new Date()): string =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 export const quarterOf = (dateISO: string): string => {

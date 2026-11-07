@@ -43,7 +43,7 @@ export interface Transaction {
   variant_id?: string | null; imei?: string | null; quantity?: number;
   unit_price?: number | null; cost_price?: number | null; profit?: number | null;
   tax_type?: string | null; tax_rate?: number | null; receipt_image?: string | null; note?: string | null;
-  date: string; created_at?: string;
+  date: string; occurred_at?: string; created_at?: string;
 }
 export interface Budget { id: string; workspace_id: string; category_id: string; month: string; amount: number; }
 export interface Goal {
@@ -100,7 +100,7 @@ export interface TxInput {
   category_id?: string | null; product_id?: string | null; variant_id?: string | null;
   imei?: string | null; quantity?: number; unit_price?: number | null;
   cost_price?: number | null; tax_type?: string | null; tax_rate?: number | null;
-  receipt_image?: string | null; note?: string; date: string;
+  receipt_image?: string | null; note?: string; date: string; occurred_at?: string;
 }
 
 /** Dữ liệu đầu vào khi thêm/sửa 1 sản phẩm (kèm danh sách biến thể). */

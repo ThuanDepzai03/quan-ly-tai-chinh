@@ -68,7 +68,9 @@ export default function Dashboard() {
     () => (state?.wallets ?? []).filter((w) => w.workspace_id === wsId), [state, wsId]);
   const txs = useMemo(
     () => (state?.transactions ?? []).filter((t) => t.workspace_id === wsId)
-      .sort((a, b) => b.date.localeCompare(a.date)),
+      .sort((a, b) =>
+        new Date(b.occurred_at ?? b.created_at ?? `${b.date}T00:00:00`).getTime()
+        - new Date(a.occurred_at ?? a.created_at ?? `${a.date}T00:00:00`).getTime()),
     [state, wsId]);
   const displayedTransactions = showAllTransactions ? txs : txs.slice(0, 5);
   const displayedWallets = showAllWallets ? wallets : wallets.slice(0, 5);
@@ -80,7 +82,11 @@ export default function Dashboard() {
   const expense = monthTxs.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
   const totalBalance = wallets.reduce((s, w) => s + w.balance, 0);
   const netCashflow = income - expense;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
+  const todayTxs = txs.filter((t) => t.date.slice(0, 10) === today);
+  const todayNet = todayTxs
+    .filter((t) => t.type === 'income' || t.type === 'expense')
+    .reduce((sum, t) => sum + (t.type === 'income' ? t.amount : -t.amount), 0);
   const budgets = useMemo(
     () => (state?.budgets ?? []).filter((b) => b.workspace_id === wsId && b.month === month),
     [state, wsId, month]);
@@ -222,6 +228,7 @@ export default function Dashboard() {
           <div><span>↓ Thu tháng này</span><strong>{fmtVND(income)}</strong></div>
           <div><span>↑ Chi tháng này</span><strong>{fmtVND(expense)}</strong></div>
           <div><span>Dòng tiền ròng</span><strong>{netCashflow >= 0 ? '+' : '−'}{fmtVND(Math.abs(netCashflow))}</strong></div>
+          <div><span>Thu nhập hôm nay (thu − chi)</span><strong>{todayNet >= 0 ? '+' : '−'}{fmtVND(Math.abs(todayNet))}</strong></div>
         </div>
       </section>
 
@@ -312,7 +319,7 @@ export default function Dashboard() {
                     {t.type === 'income' ? '+' : t.type === 'expense' ? '−' : '⇄'} {fmtVND(t.amount)}
                   </b>
                   <div className="sub">
-                    {fmtDate(t.date)} • {catName(t.category_id)} • {walletName(t.wallet_id)}
+                    {fmtDate(t.date)} {new Date(t.occurred_at ?? t.created_at ?? `${t.date}T00:00:00`).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} • {catName(t.category_id)} • {walletName(t.wallet_id)}
                     {t.profit ? ` • Lãi ${fmtVND(t.profit)}` : ''}{t.note ? ` • ${t.note}` : ''}
                     {t.tax_type ? ` • Thuế ${t.tax_type}${t.tax_rate ? ` ${(t.tax_rate * 100).toLocaleString('vi-VN')}%` : ''}` : ''}
                     {t.receipt_image ? ' • 🧾 có hóa đơn' : ''}
