@@ -162,6 +162,29 @@ export const fmtDate = (iso: string): string => {
   return d.toLocaleDateString('vi-VN');
 };
 
+export const transactionDateTime = (transaction: {
+  date: string; occurred_at?: string | null; created_at?: string | null;
+}): string => {
+  const date = transaction.date.slice(0, 10);
+  const occurredAt = transaction.occurred_at;
+  const isDateOnly = occurredAt ? /^\d{4}-\d{2}-\d{2}$/.test(occurredAt) : false;
+  const isUtcMidnight = occurredAt
+    ? /^\d{4}-\d{2}-\d{2}T00:00:00(?:\.0+)?(?:Z|\+00:00)$/.test(occurredAt)
+    : false;
+  if ((isDateOnly || isUtcMidnight) && transaction.created_at) {
+    const createdAt = new Date(transaction.created_at);
+    if (!Number.isNaN(createdAt.getTime())) {
+      const localCreatedDate = [
+        createdAt.getFullYear(),
+        String(createdAt.getMonth() + 1).padStart(2, '0'),
+        String(createdAt.getDate()).padStart(2, '0'),
+      ].join('-');
+      if (localCreatedDate === date) return transaction.created_at;
+    }
+  }
+  return occurredAt || transaction.created_at || `${date}T00:00:00`;
+};
+
 /** Tạo file CSV từ mảng object — dùng chung cho mọi báo cáo. */
 export function downloadCSV(filename: string, rows: Array<Record<string, string | number | null | undefined>>): void {
   if (rows.length === 0) { alert('Không có dữ liệu để xuất.'); return; }

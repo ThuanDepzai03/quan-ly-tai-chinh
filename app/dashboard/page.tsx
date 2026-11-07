@@ -8,7 +8,7 @@ import GlassCard, { Field, Modal } from '@/components/GlassCard';
 import TransactionForm from '@/components/TransactionForm';
 import WalletForm from '@/components/WalletForm';
 import { useAppData } from '@/lib/data';
-import { fmtDate, fmtVND, monthISO, todayISO } from '@/lib/utils';
+import { fmtDate, fmtVND, monthISO, todayISO, transactionDateTime } from '@/lib/utils';
 import { WALLET_TYPE_LABELS } from '@/lib/types';
 import type { Debt, DebtPayment, Goal, TxType, Wallet } from '@/lib/types';
 import { fileToBase64 } from '@/lib/receipt';
@@ -69,8 +69,7 @@ export default function Dashboard() {
   const txs = useMemo(
     () => (state?.transactions ?? []).filter((t) => t.workspace_id === wsId)
       .sort((a, b) =>
-        new Date(b.occurred_at ?? b.created_at ?? `${b.date}T00:00:00`).getTime()
-        - new Date(a.occurred_at ?? a.created_at ?? `${a.date}T00:00:00`).getTime()),
+        new Date(transactionDateTime(b)).getTime() - new Date(transactionDateTime(a)).getTime()),
     [state, wsId]);
   const displayedTransactions = showAllTransactions ? txs : txs.slice(0, 5);
   const displayedWallets = showAllWallets ? wallets : wallets.slice(0, 5);
@@ -319,7 +318,7 @@ export default function Dashboard() {
                     {t.type === 'income' ? '+' : t.type === 'expense' ? '−' : '⇄'} {fmtVND(t.amount)}
                   </b>
                   <div className="sub">
-                    {fmtDate(t.date)} {new Date(t.occurred_at ?? t.created_at ?? `${t.date}T00:00:00`).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} • {catName(t.category_id)} • {walletName(t.wallet_id)}
+                    {fmtDate(t.date)} {new Date(transactionDateTime(t)).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} • {catName(t.category_id)} • {walletName(t.wallet_id)}
                     {t.profit ? ` • Lãi ${fmtVND(t.profit)}` : ''}{t.note ? ` • ${t.note}` : ''}
                     {t.tax_type ? ` • Thuế ${t.tax_type}${t.tax_rate ? ` ${(t.tax_rate * 100).toLocaleString('vi-VN')}%` : ''}` : ''}
                     {t.receipt_image ? ' • 🧾 có hóa đơn' : ''}
