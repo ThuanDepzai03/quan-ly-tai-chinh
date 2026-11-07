@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useAppData } from '@/lib/data';
 import { setSessionUser, hasPin, verifyPin } from '@/lib/auth';
@@ -89,6 +89,51 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const [pinLocked, setPinLocked] = useState(false);
   const [pinInput, setPinInput] = useState('');
   const [pinErr, setPinErr] = useState('');
+  const [pullDistance, setPullDistance] = useState(0);
+  const pullStartY = useRef<number | null>(null);
+  const pullDistanceRef = useRef(0);
+  const canPullRefresh = Boolean(state && !pinLocked);
+
+  useEffect(() => {
+    if (!canPullRefresh) return;
+    const resetPull = () => {
+      pullStartY.current = null;
+      pullDistanceRef.current = 0;
+      setPullDistance(0);
+    };
+    const onTouchStart = (event: TouchEvent) => {
+      if (loading || event.touches.length !== 1 || window.scrollY > 0) return;
+      const target = event.target;
+      if (target instanceof Element && target.closest('input, select, textarea, button, a, [contenteditable="true"], .modal')) return;
+      pullStartY.current = event.touches[0].clientY;
+    };
+    const onTouchMove = (event: TouchEvent) => {
+      if (pullStartY.current === null || event.touches.length !== 1 || window.scrollY > 0) return;
+      const delta = event.touches[0].clientY - pullStartY.current;
+      if (delta <= 0) return;
+      event.preventDefault();
+      const distance = Math.min(110, delta * 0.8);
+      pullDistanceRef.current = distance;
+      setPullDistance(distance);
+    };
+    const onTouchEnd = () => {
+      if (pullStartY.current === null) return;
+      const shouldRefresh = pullDistanceRef.current >= 72 && !loading;
+      resetPull();
+      if (shouldRefresh) retryLoad();
+    };
+
+    document.addEventListener('touchstart', onTouchStart, { passive: true });
+    document.addEventListener('touchmove', onTouchMove, { passive: false });
+    document.addEventListener('touchend', onTouchEnd, { passive: true });
+    document.addEventListener('touchcancel', resetPull, { passive: true });
+    return () => {
+      document.removeEventListener('touchstart', onTouchStart);
+      document.removeEventListener('touchmove', onTouchMove);
+      document.removeEventListener('touchend', onTouchEnd);
+      document.removeEventListener('touchcancel', resetPull);
+    };
+  }, [canPullRefresh, loading, retryLoad]);
 
   useEffect(() => {
     if (hasPin()) setPinLocked(true);
@@ -169,6 +214,13 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="app-shell">
+      {pullDistance > 0 ? (
+        <div className="pull-refresh-indicator" role="status" aria-live="polite">
+          <span className={pullDistance >= 72 ? 'pull-refresh-icon pull-refresh-ready' : 'pull-refresh-icon'}
+            style={{ transform: `rotate(${Math.min(180, pullDistance * 2)}deg)` }} aria-hidden="true">↓</span>
+          <span>{pullDistance >= 72 ? 'Thả để làm mới' : 'Kéo xuống để làm mới'}</span>
+        </div>
+      ) : null}
       <header className="app-header">
         <div>
           <Link href="/dashboard" style={{ textDecoration: 'none', color: 'inherit' }}>

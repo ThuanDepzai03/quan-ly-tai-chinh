@@ -288,7 +288,7 @@ export default function Dashboard() {
             {displayedWallets.map((w) => (
               <div key={w.id} className="row-item">
                 <div><b>{w.name}</b><div className="sub">{WALLET_TYPE_LABELS[w.type]}</div></div>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <div className="dashboard-wallet-actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <b>{fmtVND(w.balance)}</b>
                   <button className="btn-ghost btn-small" onClick={() => { setEditWallet(w); setShowWallet(true); }}>Sửa</button>
                   <button className="btn-ghost btn-small" onClick={() => {
