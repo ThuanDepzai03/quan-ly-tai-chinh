@@ -13,6 +13,7 @@ import { localResetPassword, localSignIn, localSignUp, getSessionUser, setSessio
 import { DEMO_EMAIL } from '@/lib/demo';
 import { ensureLocalState, seedCloudDemoData } from '@/lib/data';
 import { Field } from '@/components/GlassCard';
+import { usePreferences } from '@/lib/preferences';
 
 type Mode = 'login' | 'register' | 'forgot';
 const REMEMBERED_EMAIL_KEY = 'qltc-remembered-email';
@@ -30,6 +31,7 @@ function withAuthTimeout<T>(request: PromiseLike<T>, label: string): Promise<T> 
 
 /** Form Đăng nhập / Đăng ký / Quên mật khẩu dùng chung cho trang chủ (/) và trang /auth. */
 export default function AuthForm({ showHomeLink = false }: { showHomeLink?: boolean }) {
+  const { t } = usePreferences();
   const [mode, setMode] = useState<Mode>('login');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -221,7 +223,7 @@ export default function AuthForm({ showHomeLink = false }: { showHomeLink?: bool
 
   return (
     <div>
-      <h1>{titles[mode]}</h1>
+      <h1>{t(titles[mode])}</h1>
       {/* <p className="muted">
         {cloud
           ? 'Đang dùng Supabase Auth thật (Email).'
@@ -246,11 +248,11 @@ export default function AuthForm({ showHomeLink = false }: { showHomeLink?: bool
       <form onSubmit={submit} className="form-grid">
         {mode === 'register' ? (
           <Field label="Họ tên">
-            <input placeholder="VD: Nguyễn Văn A" value={name} onChange={(e) => setName(e.target.value)} required />
+            <input placeholder={t('VD: Nguyễn Văn A')} value={name} onChange={(e) => setName(e.target.value)} required />
           </Field>
         ) : null}
         <Field label="Email">
-          <input placeholder="email@vidu.vn" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          <input placeholder="email@example.com" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
         </Field>
         <Field label={mode === 'forgot' ? 'Mật khẩu mới' : 'Mật khẩu (tối thiểu 6 ký tự)'}>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -259,7 +261,7 @@ export default function AuthForm({ showHomeLink = false }: { showHomeLink?: bool
               value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6}
             />
             <button type="button" className="btn-ghost" onClick={() => setShowPw((s) => !s)}>
-              {showPw ? 'Ẩn' : 'Hiện'}
+              {showPw ? t('Ẩn') : t('Hiện')}
             </button>
           </div>
         </Field>
@@ -279,29 +281,29 @@ export default function AuthForm({ showHomeLink = false }: { showHomeLink?: bool
                 catch { setError('Không xóa được email đã ghi nhớ trên thiết bị này.'); }
               }
             }} />
-            Ghi nhớ email đăng nhập trên thiết bị này
+            {t('Ghi nhớ email đăng nhập trên thiết bị này')}
           </label>
         ) : null}
         {mode === 'register' ? (
           <label className="check-row">
             <input type="checkbox" checked={withDemo} onChange={(e) => setWithDemo(e.target.checked)} />
-            Nạp sẵn dữ liệu mẫu hộ kinh doanh để trải nghiệm (không tick = workspace trống)
+            {t('Nạp sẵn dữ liệu mẫu hộ kinh doanh để trải nghiệm (không tick = workspace trống)')}
           </label>
         ) : null}
-        {msg ? <p className={msgKind === 'error' ? 'error' : ''}>{msg}</p> : null}
+        {msg ? <p className={msgKind === 'error' ? 'error' : ''}>{t(msg)}</p> : null}
         {showResend && cloud ? (
           <div>
             <button type="button" className="btn-secondary" onClick={handleResend} disabled={busy}>
-              {busy ? 'Đang gửi…' : 'Gửi lại mail xác thực'}
+              {busy ? t('Đang gửi…') : t('Gửi lại mail xác thực')}
             </button>
-            {resendMsg ? <p style={{ fontSize: 13, marginTop: 8 }}>{resendMsg}</p> : null}
+            {resendMsg ? <p style={{ fontSize: 13, marginTop: 8 }}>{t(resendMsg)}</p> : null}
             <p className="muted" style={{ fontSize: 13 }}>
               Không thấy mail? Kiểm tra Spam / Promotions, hoặc nhờ admin vào Supabase &gt; Authentication &gt; Users &gt; Confirm user thủ công.
             </p>
           </div>
         ) : null}
         <button type="submit" disabled={busy}>
-          {busy ? 'Đang xử lý…' : titles[mode]}
+          {busy ? t('Đang xử lý…') : t(titles[mode])}
         </button>
       </form>
       {mode === 'login' ? (
@@ -312,20 +314,20 @@ export default function AuthForm({ showHomeLink = false }: { showHomeLink?: bool
           onClick={() => { setMode('register'); setMsg(''); setShowResend(false); setResendMsg(''); }}
           disabled={busy}
         >
-          Chưa có tài khoản? Đăng ký ngay
+          {t('Chưa có tài khoản? Đăng ký ngay')}
         </button>
       ) : null}
       <p style={{ marginTop: 16, lineHeight: 1.9 }}>
         {mode !== 'login' ? (
-          <Link href="#" onClick={(e) => { e.preventDefault(); setMode('login'); setMsg(''); setShowResend(false); }}>Đã có tài khoản? Đăng nhập</Link>
+          <Link href="#" onClick={(e) => { e.preventDefault(); setMode('login'); setMsg(''); setShowResend(false); }}>{t('Đã có tài khoản? Đăng nhập')}</Link>
         ) : null}
         {mode !== 'forgot' ? (
-          <><br /><Link href="#" onClick={(e) => { e.preventDefault(); setMode('forgot'); setMsg(''); setShowResend(false); }}>Quên mật khẩu?</Link></>
+          <><br /><Link href="#" onClick={(e) => { e.preventDefault(); setMode('forgot'); setMsg(''); setShowResend(false); }}>{t('Quên mật khẩu?')}</Link></>
         ) : null}
-        {showHomeLink ? (<><br /><Link href="/">← Về trang chủ</Link></>) : null}
+        {showHomeLink ? (<><br /><Link href="/">{t('← Về trang chủ')}</Link></>) : null}
       </p>
       <p className="muted" style={{ fontSize: 13 }}>
-        Trang web được phát triển bởi <a href="https://www.facebook.com/Theplay.Hacker.ss/" target="_blank" rel="noopener noreferrer">Thuận</a> — Tham gia nhóm phát triển đa ngành tại  <a href="https://discord.gg/GDCm4WaR9" target="_blank" rel="noopener noreferrer">Discord</a>
+        {t('Trang web được phát triển bởi')} <a href="https://www.facebook.com/Theplay.Hacker.ss/" target="_blank" rel="noopener noreferrer">Thuận</a> — {t('Tham gia nhóm phát triển đa ngành tại')} <a href="https://discord.gg/GDCm4WaR9" target="_blank" rel="noopener noreferrer">Discord</a>
       </p>
     </div>
   );

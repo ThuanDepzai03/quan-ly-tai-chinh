@@ -6,9 +6,11 @@ import ProductForm from '@/components/ProductForm';
 import { useAppData } from '@/lib/data';
 import { fmtDate, fmtVND, profitOf, todayISO } from '@/lib/utils';
 import type { Product, ProductField, ProductInput } from '@/lib/types';
+import { usePreferences } from '@/lib/preferences';
 
 export default function Kho() {
   const data = useAppData();
+  const { t } = usePreferences();
   const { state } = data;
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState('');
@@ -65,11 +67,11 @@ export default function Kho() {
   return (
     <AppShell>
       <div className="flex-row">
-        <StatCard label="Sản phẩm" value={String(products.length)} sub={`${cats.length} danh mục hàng`} />
+        <StatCard label="Sản phẩm" value={String(products.length)} sub={`${cats.length} ${t('danh mục hàng')}`} />
         <StatCard label="Giá trị tồn kho (giá nhập)" value={fmtVND(totalCostValue)} sub="Tổng vốn đang nằm trong kho" />
         <StatCard label="Giá trị tồn kho (giá bán)" value={fmtVND(totalSaleValue)} sub="Nếu bán hết kho" />
         <StatCard label="Lãi bán hàng tích lũy" value={fmtVND(totalProfit)} sub="Tổng profit các đơn bán" />
-        <StatCard label="Sắp hết / hết hàng" value={String(lowStock.length)} sub={lowStock.map((p) => p.name).slice(0, 3).join(', ') || 'Không có'} />
+        <StatCard label="Sắp hết / hết hàng" value={String(lowStock.length)} sub={lowStock.map((p) => p.name).slice(0, 3).join(', ') || t('Không có')} />
       </div>
 
       <GlassCard title="Kho hàng" action={
@@ -77,19 +79,19 @@ export default function Kho() {
           {products.length === 0 ? (
             <button className="btn-ghost btn-small" onClick={async () => {
               const err = await data.seedDemoInventory();
-              setSeedMsg(err ?? 'Đã nạp kho mẫu giống bản demo: 11 sản phẩm, 7 danh mục, 5 trường tùy chỉnh, 5 biến thể.');
-            }}>📥 Nạp kho mẫu</button>
+              setSeedMsg(err ?? t('Đã nạp kho mẫu giống bản demo: 11 sản phẩm, 7 danh mục, 5 trường tùy chỉnh, 5 biến thể.'));
+            }}>{t('📥 Nạp kho mẫu')}</button>
           ) : null}
-          <button className="btn-ghost btn-small" onClick={() => setShowCatManager(true)}>Danh mục hàng</button>
-          <button className="btn-ghost btn-small" onClick={() => setShowFieldManager(true)}>Trường tùy chỉnh</button>
-          <button className="btn-small" onClick={() => { setEditing(null); setShowForm(true); }}>+ Thêm sản phẩm</button>
+          <button className="btn-ghost btn-small" onClick={() => setShowCatManager(true)}>{t('Danh mục hàng')}</button>
+          <button className="btn-ghost btn-small" onClick={() => setShowFieldManager(true)}>{t('Trường tùy chỉnh')}</button>
+          <button className="btn-small" onClick={() => { setEditing(null); setShowForm(true); }}>{t('+ Thêm sản phẩm')}</button>
         </div>
       }>
         {seedMsg ? <p className="muted" style={{ fontSize: 13 }}>{seedMsg}</p> : null}
         <div className="toolbar">
-          <input placeholder="Tìm theo tên, SKU, IMEI…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <input placeholder={t('Tìm theo tên, SKU, IMEI…')} value={search} onChange={(e) => setSearch(e.target.value)} />
           <select value={catFilter} onChange={(e) => setCatFilter(e.target.value)}>
-            <option value="">Tất cả danh mục</option>
+            <option value="">{t('Tất cả danh mục')}</option>
             {cats.map((c) => (<option key={c.id} value={c.id}>{c.icon} {c.name}</option>))}
           </select>
         </div>
@@ -116,23 +118,23 @@ export default function Kho() {
                   <div className="inventory-product-details">
                     <b>{p.name}</b>{' '}
                     <span className="badge">{catName(p.category_id)}</span>{' '}
-                    {low ? <span className="badge danger">Sắp hết hàng</span> : null}
+                    {low ? <span className="badge danger">{t('Sắp hết hàng')}</span> : null}
                     <div className="sub">
-                      SKU: {p.sku || '—'} • Nhập {fmtVND(p.cost_price)} • Bán {fmtVND(p.sale_price)} •
-                      Tồn: <b style={{ color: low ? '#ff3b30' : 'inherit' }}>{p.stock} {p.unit}</b>
+                      SKU: {p.sku || '—'} • {t('Nhập')} {fmtVND(p.cost_price)} • {t('Bán')} {fmtVND(p.sale_price)} •
+                      {t('Tồn')}: <b style={{ color: low ? '#ff3b30' : 'inherit' }}>{p.stock} {p.unit}</b>
                       {p.custom_values && Object.entries(p.custom_values).map(([k, v]) => v ? ` • ${k}: ${v}` : '').join('')}
                     </div>
                     {vs.length > 0 ? (
                       <div className="sub" style={{ marginTop: 4 }}>
-                        Biến thể: {vs.map((v) => `${v.name} (tồn ${v.stock}, ${fmtVND(v.sale_price)}${v.imeis?.length ? `, ${v.imeis.length} IMEI` : ''})`).join(' • ')}
+                        {t('Biến thể')}: {vs.map((v) => `${v.name} (${t('Tồn')} ${v.stock}, ${fmtVND(v.sale_price)}${v.imeis?.length ? `, ${v.imeis.length} IMEI` : ''})`).join(' • ')}
                       </div>
                     ) : null}
                   </div>
                   <div className="inventory-product-actions" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    <button className="btn-small" onClick={() => setSellProduct(p)}>Bán</button>
-                    <button className="btn-ghost btn-small" onClick={() => setImportProduct(p)}>Nhập kho</button>
-                    <button className="btn-ghost btn-small" onClick={() => openEdit(p)}>Sửa</button>
-                    <button className="btn-ghost btn-small" onClick={() => setDeleteId(p.id)}>Xóa</button>
+                    <button className="btn-small" onClick={() => setSellProduct(p)}>{t('Bán')}</button>
+                    <button className="btn-ghost btn-small" onClick={() => setImportProduct(p)}>{t('Nhập kho')}</button>
+                    <button className="btn-ghost btn-small" onClick={() => openEdit(p)}>{t('Sửa')}</button>
+                    <button className="btn-ghost btn-small" onClick={() => setDeleteId(p.id)}>{t('Xóa')}</button>
                   </div>
                 </div>
               );
@@ -168,10 +170,10 @@ export default function Kho() {
       {importProduct ? <ImportModal product={importProduct} onClose={() => setImportProduct(null)} /> : null}
       {deleteId ? (
         <Modal title="Xóa sản phẩm?" onClose={() => setDeleteId(null)}>
-          <p>Giao dịch bán/nhập cũ vẫn giữ số lượng và giá vốn để báo cáo lãi không đổi. Bạn chắc chắn muốn xóa?</p>
+          <p>{t('Giao dịch bán/nhập cũ vẫn giữ số lượng và giá vốn để báo cáo lãi không đổi. Bạn chắc chắn muốn xóa?')}</p>
           <div className="flex-row">
-            <button className="btn-danger" onClick={() => { data.deleteProduct(deleteId); setDeleteId(null); }}>Xóa sản phẩm</button>
-            <button className="btn-secondary" onClick={() => setDeleteId(null)}>Hủy</button>
+            <button className="btn-danger" onClick={() => { data.deleteProduct(deleteId); setDeleteId(null); }}>{t('Xóa sản phẩm')}</button>
+            <button className="btn-secondary" onClick={() => setDeleteId(null)}>{t('Hủy')}</button>
           </div>
         </Modal>
       ) : null}
@@ -183,6 +185,7 @@ export default function Kho() {
 
 function SellModal({ product, onClose }: { product: Product; onClose: () => void }) {
   const data = useAppData();
+  const { t } = usePreferences();
   const { state } = data;
   const wallets = (state?.wallets ?? []).filter((w) => w.workspace_id === state?.currentWorkspaceId);
   const variants = (state?.productVariants ?? []).filter((v) => v.product_id === product.id);
@@ -220,12 +223,12 @@ function SellModal({ product, onClose }: { product: Product; onClose: () => void
   }
 
   return (
-    <Modal title={`Bán: ${product.name}`} onClose={onClose}>
+    <Modal title={`${t('Bán')}: ${product.name}`} onClose={onClose}>
       <form onSubmit={submit} className="form-grid">
         {variants.length > 0 ? (
           <Field label="Biến thể">
             <select value={variantId} onChange={(e) => { setVariantId(e.target.value); setImei(''); }}>
-              <option value="">— Giá chung của sản phẩm —</option>
+              <option value="">— {t('Giá chung của sản phẩm')} —</option>
               {variants.map((v) => (
                 <option key={v.id} value={v.id}>{v.name} — tồn {v.stock} • {fmtVND(v.sale_price)}</option>
               ))}
@@ -238,7 +241,7 @@ function SellModal({ product, onClose }: { product: Product; onClose: () => void
         {variant?.imeis?.length ? (
           <Field label="IMEI / Serial cụ thể">
             <select value={imei} onChange={(e) => setImei(e.target.value)}>
-              <option value="">— Không chọn IMEI —</option>
+              <option value="">— {t('Không chọn IMEI')} —</option>
               {variant.imeis.map((i) => (<option key={i} value={i}>{i}</option>))}
             </select>
           </Field>
@@ -252,12 +255,12 @@ function SellModal({ product, onClose }: { product: Product; onClose: () => void
           <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="VD: Bán cho khách Anh Tuấn" />
         </Field>
         <div className="profit-box">
-          Doanh thu: {fmtVND(revenue)}<br />
-          Giá vốn: {fmtVND(qty * cost)}<br />
-          Lãi: <b style={{ color: '#34c759' }}>{fmtVND(profit)}</b>
+          {t('Doanh thu')}: {fmtVND(revenue)}<br />
+          {t('Giá vốn')}: {fmtVND(qty * cost)}<br />
+          {t('Lãi')}: <b style={{ color: '#34c759' }}>{fmtVND(profit)}</b>
         </div>
-        {err ? <p className="error">{err}</p> : null}
-        <button type="submit" disabled={saving}>{saving ? 'Đang lưu…' : 'Xác nhận bán'}</button>
+        {err ? <p className="error">{t(err)}</p> : null}
+        <button type="submit" disabled={saving}>{saving ? t('Đang lưu…') : t('Xác nhận bán')}</button>
       </form>
     </Modal>
   );
@@ -265,6 +268,7 @@ function SellModal({ product, onClose }: { product: Product; onClose: () => void
 
 function ImportModal({ product, onClose }: { product: Product; onClose: () => void }) {
   const data = useAppData();
+  const { t } = usePreferences();
   const { state } = data;
   const wallets = (state?.wallets ?? []).filter((w) => w.workspace_id === state?.currentWorkspaceId);
   const variants = (state?.productVariants ?? []).filter((v) => v.product_id === product.id);
@@ -295,12 +299,12 @@ function ImportModal({ product, onClose }: { product: Product; onClose: () => vo
   }
 
   return (
-    <Modal title={`Nhập kho: ${product.name}`} onClose={onClose}>
+    <Modal title={`${t('Nhập kho')}: ${product.name}`} onClose={onClose}>
       <form onSubmit={submit} className="form-grid">
         {variants.length > 0 ? (
           <Field label="Biến thể">
             <select value={variantId} onChange={(e) => setVariantId(e.target.value)}>
-              <option value="">— Nhập chung cho sản phẩm —</option>
+              <option value="">— {t('Nhập chung cho sản phẩm')} —</option>
               {variants.map((v) => (<option key={v.id} value={v.id}>{v.name} — tồn {v.stock}</option>))}
             </select>
           </Field>
@@ -319,9 +323,9 @@ function ImportModal({ product, onClose }: { product: Product; onClose: () => vo
         <Field label="IMEI nhập (cách nhau bằng dấu phẩy, nếu có)">
           <input value={imeis} onChange={(e) => setImeis(e.target.value)} placeholder="VD: 356789123456703, 356789123456704" />
         </Field>
-        <p className="muted">Tổng chi: <b style={{ color: 'var(--text)' }}>{fmtVND(qty * (Number(cost) || 0))}</b> — sẽ ghi 1 giao dịch Chi “Nhập hàng” và tăng tồn kho.</p>
-        {err ? <p className="error">{err}</p> : null}
-        <button type="submit" disabled={saving}>{saving ? 'Đang lưu…' : 'Xác nhận nhập kho'}</button>
+        <p className="muted">{t('Tổng chi:')} <b style={{ color: 'var(--text)' }}>{fmtVND(qty * (Number(cost) || 0))}</b> {t('— sẽ ghi 1 giao dịch Chi “Nhập hàng” và tăng tồn kho.')}</p>
+        {err ? <p className="error">{t(err)}</p> : null}
+        <button type="submit" disabled={saving}>{saving ? t('Đang lưu…') : t('Xác nhận nhập kho')}</button>
       </form>
     </Modal>
   );
@@ -329,6 +333,7 @@ function ImportModal({ product, onClose }: { product: Product; onClose: () => vo
 
 function CategoryManager({ onClose }: { onClose: () => void }) {
   const data = useAppData();
+  const { t } = usePreferences();
   const { state } = data;
   const [name, setName] = useState('');
   const [color, setColor] = useState('#0a84ff');
@@ -358,14 +363,14 @@ function CategoryManager({ onClose }: { onClose: () => void }) {
             <input type="color" value={color} onChange={(e) => setColor(e.target.value)} />
           </Field>
         </div>
-        {err ? <p className="error">{err}</p> : null}
-        <button type="submit" disabled={saving}>{saving ? 'Đang lưu…' : 'Thêm danh mục'}</button>
+        {err ? <p className="error">{t(err)}</p> : null}
+        <button type="submit" disabled={saving}>{saving ? t('Đang lưu…') : t('Thêm danh mục')}</button>
       </form>
       <div className="row-list" style={{ marginTop: 12 }}>
         {cats.map((c) => (
           <div key={c.id} className="row-item">
             <span><span style={{ color: c.color }}>●</span> {c.icon} {c.name}</span>
-            <button className="btn-ghost btn-small" onClick={() => data.deleteProductCategory(c.id)}>Xóa</button>
+            <button className="btn-ghost btn-small" onClick={() => data.deleteProductCategory(c.id)}>{t('Xóa')}</button>
           </div>
         ))}
       </div>
@@ -375,6 +380,7 @@ function CategoryManager({ onClose }: { onClose: () => void }) {
 
 function FieldManager({ onClose }: { onClose: () => void }) {
   const data = useAppData();
+  const { t } = usePreferences();
   const { state } = data;
   const [name, setName] = useState('');
   const [type, setType] = useState<ProductField['field_type']>('text');
@@ -406,9 +412,9 @@ function FieldManager({ onClose }: { onClose: () => void }) {
         </Field>
         <Field label="Kiểu dữ liệu">
           <select value={type} onChange={(e) => setType(e.target.value as ProductField['field_type'])}>
-            <option value="text">Chữ</option><option value="number">Số</option>
-            <option value="date">Ngày</option><option value="select">Chọn 1 trong danh sách</option>
-            <option value="boolean">Có / Không</option>
+            <option value="text">{t('Chữ')}</option><option value="number">{t('Số')}</option>
+            <option value="date">{t('Ngày')}</option><option value="select">{t('Chọn 1 trong danh sách')}</option>
+            <option value="boolean">{t('Có / Không')}</option>
           </select>
         </Field>
         {type === 'select' ? (
@@ -418,20 +424,20 @@ function FieldManager({ onClose }: { onClose: () => void }) {
         ) : null}
         <label className="check-row">
           <input type="checkbox" checked={required} onChange={(e) => setRequired(e.target.checked)} />
-          Bắt buộc nhập khi thêm sản phẩm
+          {t('Bắt buộc nhập khi thêm sản phẩm')}
         </label>
-        {err ? <p className="error">{err}</p> : null}
-        <button type="submit" disabled={saving}>{saving ? 'Đang lưu…' : 'Thêm trường'}</button>
+        {err ? <p className="error">{t(err)}</p> : null}
+        <button type="submit" disabled={saving}>{saving ? t('Đang lưu…') : t('Thêm trường')}</button>
       </form>
       <div className="row-list" style={{ marginTop: 12 }}>
         {fields.map((f) => (
           <div key={f.id} className="row-item">
-            <span>{f.name} <span className="badge">{f.field_type}</span>{f.required ? ' *' : ''}</span>
+            <span>{f.name} <span className="badge">{t(f.field_type)}</span>{f.required ? ' *' : ''}</span>
             <div style={{ display: 'flex', gap: 6 }}>
               <button className="btn-ghost btn-small" onClick={() => data.saveProductField({ id: f.id, name: f.name, field_type: f.field_type, required: f.required, enabled: !f.enabled, options: f.options ?? null })}>
-                {f.enabled ? 'Tắt' : 'Bật'}
+                {t(f.enabled ? 'Tắt' : 'Bật')}
               </button>
-              <button className="btn-ghost btn-small" onClick={() => data.deleteProductField(f.id)}>Xóa</button>
+              <button className="btn-ghost btn-small" onClick={() => data.deleteProductField(f.id)}>{t('Xóa')}</button>
             </div>
           </div>
         ))}

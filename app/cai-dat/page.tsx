@@ -9,6 +9,7 @@ import { fmtVND, monthISO } from '@/lib/utils';
 import { ACCOUNTING_REGIMES, BUSINESS_SECTOR_LABELS, BUSINESS_TYPE_LABELS, TAX_CALCULATION_METHOD_LABELS, TAX_CIRCULAR_LABELS, WORKSPACE_MODE_LABELS } from '@/lib/types';
 import type { BusinessSector, BusinessType, MemberRole, TaxCircular, WorkspaceMode } from '@/lib/types';
 import { defaultTaxMethod, inferBusinessType, taxMethodOptions, TAX_RULES_2026 } from '@/lib/tax-config';
+import { usePreferences } from '@/lib/preferences';
 
 const ROLE_LABELS: Record<MemberRole, string> = {
   owner: 'Chủ sở hữu', admin: 'Quản trị', member: 'Thành viên', viewer: 'Chỉ xem',
@@ -16,6 +17,7 @@ const ROLE_LABELS: Record<MemberRole, string> = {
 
 export default function CaiDat() {
   const data = useAppData();
+  const { theme, language, error: preferencesError, setTheme, setLanguage, t } = usePreferences();
   const { state, currentWorkspace } = data;
   const [wsName, setWsName] = useState('');
   const [wsMode, setWsMode] = useState<WorkspaceMode>('household');
@@ -179,33 +181,52 @@ export default function CaiDat() {
 
   return (
     <AppShell>
-      {msg ? <p className="glass" style={{ padding: '12px 20px' }}>{msg}</p> : null}
+      {msg ? <p className="glass" style={{ padding: '12px 20px' }}>{t(msg)}</p> : null}
+
+      <GlassCard title={t('Cài đặt giao diện')}>
+        <p className="muted">{t('Tùy chỉnh giao diện và ngôn ngữ của ứng dụng trên thiết bị này.')}</p>
+        <div className="form-row">
+          <Field label={t('Giao diện')}>
+            <select value={theme} onChange={(event) => setTheme(event.target.value as 'light' | 'dark')}>
+              <option value="light">{t('Sáng')}</option>
+              <option value="dark">{t('Tối')}</option>
+            </select>
+          </Field>
+          <Field label={t('Ngôn ngữ')}>
+            <select value={language} onChange={(event) => setLanguage(event.target.value as 'vi' | 'en')}>
+              <option value="vi">{t('Tiếng Việt')}</option>
+              <option value="en">{t('Tiếng Anh')}</option>
+            </select>
+          </Field>
+        </div>
+        {preferencesError ? <p className="error">{preferencesError}</p> : null}
+      </GlassCard>
 
       <GlassCard title="Không gian làm việc" action={
-        <button className="btn-small" onClick={() => openWsForm()}>+ Tạo không gian mới</button>
+        <button className="btn-small" onClick={() => openWsForm()}>{t('+ Tạo không gian mới')}</button>
       }>
         <div className="row-list">
           {(state?.workspaces ?? []).map((w) => (
             <div key={w.id} className="row-item">
               <div>
                 <b>{w.name}</b>{w.id === wsId ? ' ★' : ''}
-                <div className="sub">{WORKSPACE_MODE_LABELS[w.mode]} • {BUSINESS_TYPE_LABELS[w.business_type ?? inferBusinessType(w.mode)]} • {TAX_CIRCULAR_LABELS[w.tax_circular]}</div>
+                <div className="sub">{t(WORKSPACE_MODE_LABELS[w.mode])} • {t(BUSINESS_TYPE_LABELS[w.business_type ?? inferBusinessType(w.mode)])} • {t(TAX_CIRCULAR_LABELS[w.tax_circular])}</div>
               </div>
               <div style={{ display: 'flex', gap: 6 }}>
                 {w.id !== wsId ? (
-                  <button className="btn-ghost btn-small" onClick={() => data.switchWorkspace(w.id)}>Chuyển sang</button>
+                  <button className="btn-ghost btn-small" onClick={() => data.switchWorkspace(w.id)}>{t('Chuyển sang')}</button>
                 ) : null}
-                <button className="btn-ghost btn-small" onClick={() => openWsForm(w.id)}>Sửa</button>
+                <button className="btn-ghost btn-small" onClick={() => openWsForm(w.id)}>{t('Sửa')}</button>
                 <button className="btn-ghost btn-small" onClick={() => {
                   const err = data.deleteWorkspace(w.id);
                   if (err) setMsg(err); else setMsg('Đã xóa không gian.');
-                }}>Xóa</button>
+                }}>{t('Xóa')}</button>
               </div>
             </div>
           ))}
         </div>
         <p className="muted" style={{ fontSize: 13 }}>
-          Mỗi không gian có ví, giao dịch, kho hàng và thuế riêng. Xóa không gian sẽ xóa toàn bộ dữ liệu bên trong.
+          {t('Mỗi không gian có ví, giao dịch, kho hàng và thuế riêng. Xóa không gian sẽ xóa toàn bộ dữ liệu bên trong.')}
         </p>
       </GlassCard>
 
@@ -235,7 +256,7 @@ export default function CaiDat() {
                 });
               }}>
                 {(Object.keys(BUSINESS_TYPE_LABELS) as BusinessType[]).map((type) => (
-                  <option key={type} value={type}>{BUSINESS_TYPE_LABELS[type]}</option>
+                  <option key={type} value={type}>{t(BUSINESS_TYPE_LABELS[type])}</option>
                 ))}
               </select>
             </Field>
@@ -245,7 +266,7 @@ export default function CaiDat() {
                   data.updateTaxSettings({ business_sector: e.target.value as BusinessSector });
                 }}>
                   {(Object.keys(BUSINESS_SECTOR_LABELS) as BusinessSector[]).map((sector) => (
-                    <option key={sector} value={sector}>{BUSINESS_SECTOR_LABELS[sector]}</option>
+                    <option key={sector} value={sector}>{t(BUSINESS_SECTOR_LABELS[sector])}</option>
                   ))}
                 </select>
               </Field>
@@ -255,14 +276,14 @@ export default function CaiDat() {
                 data.updateTaxSettings({ tax_circular: e.target.value as TaxCircular });
               }}>
                 {ACCOUNTING_REGIMES.map((c) => (
-                  <option key={c} value={c}>{TAX_CIRCULAR_LABELS[c]}</option>
+                  <option key={c} value={c}>{t(TAX_CIRCULAR_LABELS[c])}</option>
                 ))}
               </select>
             </Field>
             <Field label="Phương pháp ước tính thuế thu nhập (tự xác định theo chủ thể/ngưỡng)">
               <select value={activeTaxMethod} disabled>
                 {activeTaxMethods.map((method) => (
-                  <option key={method} value={method}>{TAX_CALCULATION_METHOD_LABELS[method]}</option>
+                  <option key={method} value={method}>{t(TAX_CALCULATION_METHOD_LABELS[method])}</option>
                 ))}
               </select>
             </Field>
@@ -278,9 +299,9 @@ export default function CaiDat() {
                   onChange={(e) => data.updateTaxSettings({ tncn_deduction: Number(e.target.value) || 0 })} />
               </Field>
             ) : null}
-            <button type="submit">Lưu cài đặt thuế</button>
+            <button type="submit">{t('Lưu cài đặt thuế')}</button>
             <p className="muted" style={{ fontSize: 13 }}>
-              Loại hình chủ thể độc lập với chế độ kế toán. Thuế hộ kinh doanh áp dụng tỷ lệ theo nhóm ngành và ngưỡng doanh thu; doanh nghiệp áp dụng TNDN theo lợi nhuận tính thuế, không lấy doanh thu thay lợi nhuận. Quy tắc tham chiếu được tách tại cấu hình thuế 2026.
+              {t('Loại hình chủ thể độc lập với chế độ kế toán. Thuế hộ kinh doanh áp dụng tỷ lệ theo nhóm ngành và ngưỡng doanh thu; doanh nghiệp áp dụng TNDN theo lợi nhuận tính thuế, không lấy doanh thu thay lợi nhuận. Quy tắc tham chiếu được tách tại cấu hình thuế 2026.')}
             </p>
           </form>
         </GlassCard>
@@ -292,7 +313,7 @@ export default function CaiDat() {
           if (!memberEmail.trim()) { setMsg('Nhập email thành viên.'); return; }
           const error = await data.saveMember({ email: memberEmail.trim(), name: memberName.trim(), role: memberRole });
           if (error) { setMsg(error); return; }
-          setMsg('Đã thêm thành viên. Lưu ý: ở bản cloud, thành viên chỉ xem được dữ liệu sau khi người đó đăng ký tài khoản Supabase và được gán quyền — email ở đây dùng để nhận diện trong danh sách.');
+          setMsg('Đã thêm thành viên. Thành viên chỉ xem được dữ liệu sau khi người đó đăng ký tài khoản Supabase và được gán quyền — email ở đây dùng để nhận diện trong danh sách.');
           setMemberEmail(''); setMemberName('');
         }}>
           <div className="form-row">
@@ -300,27 +321,27 @@ export default function CaiDat() {
               <input placeholder="email@vidu.vn" value={memberEmail} onChange={(e) => setMemberEmail(e.target.value)} />
             </Field>
             <Field label="Tên hiển thị">
-              <input placeholder="VD: Nguyễn Văn A" value={memberName} onChange={(e) => setMemberName(e.target.value)} />
+              <input placeholder={t('VD: Nguyễn Văn A')} value={memberName} onChange={(e) => setMemberName(e.target.value)} />
             </Field>
             <Field label="Vai trò">
               <select value={memberRole} onChange={(e) => setMemberRole(e.target.value as MemberRole)}>
                 {(Object.keys(ROLE_LABELS) as MemberRole[]).map((r) => (
-                  <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+                  <option key={r} value={r}>{t(ROLE_LABELS[r])}</option>
                 ))}
               </select>
             </Field>
           </div>
-          <button type="submit">Thêm thành viên</button>
+          <button type="submit">{t('Thêm thành viên')}</button>
         </form>
         <div className="row-list" style={{ marginTop: 12 }}>
           {members.map((m) => (
             <div key={m.id} className="row-item">
-              <span>{m.name ?? m.email ?? m.user_id} <span className="badge">{ROLE_LABELS[m.role]}</span></span>
+              <span>{m.name ?? m.email ?? m.user_id} <span className="badge">{t(ROLE_LABELS[m.role])}</span></span>
               {m.role !== 'owner' ? (
                 <button className="btn-ghost btn-small" onClick={() => {
                   const err = data.deleteMember(m.id);
                   if (err) setMsg(err); else setMsg('Đã xóa thành viên.');
-                }}>Xóa</button>
+                }}>{t('Xóa')}</button>
               ) : null}
             </div>
           ))}
@@ -338,28 +359,28 @@ export default function CaiDat() {
         }}>
           <div className="form-row">
             <Field label="Tên danh mục mới">
-              <input placeholder="VD: Tiền điện, Bán sỉ" value={catName} onChange={(e) => setCatName(e.target.value)} />
+              <input placeholder={t('VD: Tiền điện, Bán sỉ')} value={catName} onChange={(e) => setCatName(e.target.value)} />
             </Field>
             <Field label="Loại">
               <select value={catKind} onChange={(e) => setCatKind(e.target.value as 'income' | 'expense')}>
-                <option value="income">Thu</option><option value="expense">Chi</option>
+                <option value="income">{t('Thu')}</option><option value="expense">{t('Chi')}</option>
               </select>
             </Field>
           </div>
-          <button type="submit">Thêm danh mục</button>
+          <button type="submit">{t('Thêm danh mục')}</button>
         </form>
         <div className="row-list" style={{ marginTop: 12 }}>
           {cats.map((c) => (
             <div key={c.id} className="row-item">
-              <span>{c.icon} {c.name} <span className="badge">{c.kind === 'income' ? 'Thu' : 'Chi'}</span></span>
-              <button className="btn-ghost btn-small" onClick={() => data.deleteCategory(c.id)}>Xóa</button>
+              <span>{c.icon} {c.name} <span className="badge">{t(c.kind === 'income' ? 'Thu' : 'Chi')}</span></span>
+              <button className="btn-ghost btn-small" onClick={() => data.deleteCategory(c.id)}>{t('Xóa')}</button>
             </div>
           ))}
         </div>
-        <p className="muted" style={{ fontSize: 13 }}>Xóa danh mục thì giao dịch cũ vẫn giữ nguyên, chỉ gỡ liên kết danh mục; ngân sách của danh mục đó cũng bị xóa.</p>
+        <p className="muted" style={{ fontSize: 13 }}>{t('Xóa danh mục thì giao dịch cũ vẫn giữ nguyên, chỉ gỡ liên kết danh mục; ngân sách của danh mục đó cũng bị xóa.')}</p>
       </GlassCard>
 
-      <GlassCard title={`Ngân sách tháng ${month}`}>
+      <GlassCard title={`${t('Ngân sách tháng')} ${month}`}>
         <form className="form-grid" onSubmit={async (e) => {
           e.preventDefault();
           if (!budgetCat || !budgetAmount) { setMsg('Chọn danh mục và nhập số tiền ngân sách.'); return; }
@@ -371,7 +392,7 @@ export default function CaiDat() {
           <div className="form-row">
             <Field label="Danh mục chi">
               <select value={budgetCat} onChange={(e) => setBudgetCat(e.target.value)}>
-                <option value="">— Chọn danh mục —</option>
+                <option value="">— {t('Chọn danh mục')} —</option>
                 {cats.filter((c) => c.kind === 'expense').map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
               </select>
             </Field>
@@ -379,13 +400,13 @@ export default function CaiDat() {
               <input type="number" min={0} value={budgetAmount} onChange={(e) => setBudgetAmount(e.target.value)} />
             </Field>
           </div>
-          <button type="submit">Lưu ngân sách</button>
+          <button type="submit">{t('Lưu ngân sách')}</button>
         </form>
         <div className="row-list" style={{ marginTop: 12 }}>
           {monthBudgets.map((b) => (
             <div key={b.id} className="row-item">
               <span>{cats.find((c) => c.id === b.category_id)?.name ?? '—'} — {fmtVND(b.amount)}</span>
-              <button className="btn-ghost btn-small" onClick={() => { data.deleteBudget(b.id); setMsg('Đã xóa ngân sách.'); }}>Xóa</button>
+              <button className="btn-ghost btn-small" onClick={() => { data.deleteBudget(b.id); setMsg('Đã xóa ngân sách.'); }}>{t('Xóa')}</button>
             </div>
           ))}
         </div>
@@ -396,7 +417,7 @@ export default function CaiDat() {
           <Field label="Họ tên hiển thị">
             <input value={newName} onChange={(e) => setNewName(e.target.value)} />
           </Field>
-          <button type="submit">Đổi tên</button>
+          <button type="submit">{t('Đổi tên')}</button>
         </form>
         <form className="form-grid" onSubmit={changePassword} style={{ marginTop: 16 }}>
           <div className="form-row">
@@ -407,39 +428,39 @@ export default function CaiDat() {
               <input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} required />
             </Field>
           </div>
-          <button type="submit">Đổi mật khẩu</button>
-          <p className="muted" style={{ fontSize: 13 }}>Đổi mật khẩu sẽ đăng xuất mọi thiết bị đang đăng nhập.</p>
+          <button type="submit">{t('Đổi mật khẩu')}</button>
+          <p className="muted" style={{ fontSize: 13 }}>{t('Đổi mật khẩu sẽ đăng xuất mọi thiết bị đang đăng nhập.')}</p>
         </form>
         <form className="form-grid" onSubmit={savePin} style={{ marginTop: 16 }}>
           <div className="form-row">
             <Field label="PIN cũ (để trống nếu chưa đặt PIN)">
-              <input type="password" inputMode="numeric" placeholder="VD: 1234" value={oldPin} onChange={(e) => setOldPin(e.target.value)} />
+              <input type="password" inputMode="numeric" placeholder={t('VD: 1234')} value={oldPin} onChange={(e) => setOldPin(e.target.value)} />
             </Field>
             <Field label="PIN mới (4–6 số)">
-              <input type="password" inputMode="numeric" placeholder="VD: 5678" value={pin} onChange={(e) => setPin(e.target.value)} required />
+              <input type="password" inputMode="numeric" placeholder={t('VD: 5678')} value={pin} onChange={(e) => setPin(e.target.value)} required />
             </Field>
           </div>
           <div className="flex-row">
-            <button type="submit">Đặt / Đổi PIN</button>
-            <button type="button" className="btn-secondary" onClick={() => { removePin(); setMsg('Đã gỡ mã PIN.'); }}>Gỡ PIN</button>
+            <button type="submit">{t('Đặt / Đổi PIN')}</button>
+            <button type="button" className="btn-secondary" onClick={() => { removePin(); setMsg('Đã gỡ mã PIN.'); }}>{t('Gỡ PIN')}</button>
           </div>
         </form>
         <div className="flex-row" style={{ marginTop: 16 }}>
-          <button className="btn-secondary" onClick={signOut}>Đăng xuất</button>
-          <button className="btn-danger" onClick={() => setShowDelete(true)}>Xóa tài khoản</button>
+          <button className="btn-secondary" onClick={signOut}>{t('Đăng xuất')}</button>
+          <button className="btn-danger" onClick={() => setShowDelete(true)}>{t('Xóa tài khoản')}</button>
         </div>
       </GlassCard>
 
       {showWsForm ? (
-        <Modal title={editingWsId ? 'Sửa không gian' : 'Tạo không gian mới'} onClose={() => setShowWsForm(false)}>
+        <Modal title={t(editingWsId ? 'Sửa không gian' : 'Tạo không gian mới')} onClose={() => setShowWsForm(false)}>
           <form onSubmit={saveWs} className="form-grid">
             <Field label="Tên không gian">
-              <input placeholder="VD: Shop 2, Gia đình, Công ty" value={wsName} onChange={(e) => setWsName(e.target.value)} required />
+              <input placeholder={t('VD: Shop 2, Gia đình, Công ty')} value={wsName} onChange={(e) => setWsName(e.target.value)} required />
             </Field>
             <Field label="Chế độ">
               <select value={wsMode} onChange={(e) => setWsMode(e.target.value as WorkspaceMode)}>
                 {(Object.keys(WORKSPACE_MODE_LABELS) as WorkspaceMode[]).map((m) => (
-                  <option key={m} value={m}>{WORKSPACE_MODE_LABELS[m]}</option>
+                  <option key={m} value={m}>{t(WORKSPACE_MODE_LABELS[m])}</option>
                 ))}
               </select>
             </Field>
@@ -451,7 +472,7 @@ export default function CaiDat() {
                 if (businessType === 'enterprise') setWsVat('0.1');
               }}>
                 {(Object.keys(BUSINESS_TYPE_LABELS) as BusinessType[]).map((type) => (
-                  <option key={type} value={type}>{BUSINESS_TYPE_LABELS[type]}</option>
+                  <option key={type} value={type}>{t(BUSINESS_TYPE_LABELS[type])}</option>
                 ))}
               </select>
             </Field>
@@ -459,7 +480,7 @@ export default function CaiDat() {
               <Field label="Nhóm hoạt động kinh doanh">
                 <select value={wsBusinessSector} onChange={(e) => setWsBusinessSector(e.target.value as BusinessSector)}>
                   {(Object.keys(BUSINESS_SECTOR_LABELS) as BusinessSector[]).map((sector) => (
-                    <option key={sector} value={sector}>{BUSINESS_SECTOR_LABELS[sector]}</option>
+                    <option key={sector} value={sector}>{t(BUSINESS_SECTOR_LABELS[sector])}</option>
                   ))}
                 </select>
               </Field>
@@ -467,7 +488,7 @@ export default function CaiDat() {
             <Field label="Chế độ kế toán / thông tư tham chiếu">
               <select value={wsCircular} onChange={(e) => setWsCircular(e.target.value as TaxCircular)}>
                 {ACCOUNTING_REGIMES.map((c) => (
-                  <option key={c} value={c}>{TAX_CIRCULAR_LABELS[c]}</option>
+                  <option key={c} value={c}>{t(TAX_CIRCULAR_LABELS[c])}</option>
                 ))}
               </select>
             </Field>
@@ -482,19 +503,19 @@ export default function CaiDat() {
               </Field>
             ) : null}
             <button type="submit" disabled={savingWorkspace}>
-              {savingWorkspace ? 'Đang lưu…' : editingWsId ? 'Lưu thay đổi' : 'Tạo không gian'}
+              {savingWorkspace ? t('Đang lưu…') : editingWsId ? t('Lưu thay đổi') : t('Tạo không gian')}
             </button>
           </form>
         </Modal>
       ) : null}
       {showDelete ? (
         <Modal title="Xóa tài khoản?" onClose={() => setShowDelete(false)}>
-          <p>Hành động này xóa toàn bộ dữ liệu của tài khoản trên Supabase và đăng xuất. Nhập mật khẩu để xác nhận (bản local).</p>
+          <p>{t('Hành động này xóa toàn bộ dữ liệu của tài khoản trên Supabase và đăng xuất. Nhập mật khẩu để xác nhận (bản local).')}</p>
           <form className="form-grid" onSubmit={(e) => { e.preventDefault(); deleteAccount(); }}>
             <Field label="Nhập mật khẩu để xác nhận">
               <input type="password" value={delPw} onChange={(e) => setDelPw(e.target.value)} required />
             </Field>
-            <button type="submit" className="btn-danger">Xác nhận xóa tài khoản</button>
+            <button type="submit" className="btn-danger">{t('Xác nhận xóa tài khoản')}</button>
           </form>
         </Modal>
       ) : null}

@@ -6,11 +6,13 @@ import { useAppData } from '@/lib/data';
 import { fmtVND, localDateTimeInput, profitOf, uid } from '@/lib/utils';
 import { fileToBase64, scanReceipt } from '@/lib/receipt';
 import { Field } from './GlassCard';
+import { usePreferences } from '@/lib/preferences';
 
 export default function TransactionForm({ state, onDone, initialType = 'income' }: {
   state: AppState; onDone: () => void; initialType?: TxType;
 }) {
   const { addTransaction, saveCategory } = useAppData();
+  const { t } = usePreferences();
   const wsId = state.currentWorkspaceId;
   const wallets = state.wallets.filter((w) => w.workspace_id === wsId);
   const categories = state.categories.filter((c) => c.workspace_id === wsId);
@@ -106,7 +108,7 @@ export default function TransactionForm({ state, onDone, initialType = 'income' 
 
   return (
     <form onSubmit={submit} className="form-grid">
-      <div className="transaction-type-switch" role="group" aria-label="Loại giao dịch">
+      <div className="transaction-type-switch" role="group" aria-label={t('Loại giao dịch')}>
         {([
           ['expense', 'Chi tiền'],
           ['income', 'Thu tiền'],
@@ -118,20 +120,20 @@ export default function TransactionForm({ state, onDone, initialType = 'income' 
             className={type === value ? 'transaction-type-active' : ''}
             aria-pressed={type === value}
             onClick={() => { setType(value); if (value !== 'income') setIsSale(false); }}
-          >{label}</button>
+          >{t(label)}</button>
         ))}
       </div>
       <Field label={type === 'transfer' ? 'Ví nguồn' : 'Ví'}>
         <select value={walletId} onChange={(e) => setWalletId(e.target.value)}>
           {wallets.map((w) => (
-            <option key={w.id} value={w.id}>{w.name} ({WALLET_TYPE_LABELS[w.type]}) — {fmtVND(w.balance)}</option>
+            <option key={w.id} value={w.id}>{w.name} ({t(WALLET_TYPE_LABELS[w.type])}) — {fmtVND(w.balance)}</option>
           ))}
         </select>
       </Field>
       {type === 'transfer' ? (
         <Field label="Ví đích">
           <select value={toWalletId} onChange={(e) => setToWalletId(e.target.value)}>
-            <option value="">— Chọn ví đích —</option>
+            <option value="">— {t('Chọn ví đích')} —</option>
             {wallets.filter((w) => w.id !== walletId).map((w) => (
               <option key={w.id} value={w.id}>{w.name} — {fmtVND(w.balance)}</option>
             ))}
@@ -142,28 +144,28 @@ export default function TransactionForm({ state, onDone, initialType = 'income' 
         <Field label="Danh mục">
           <div className="category-select-row">
             <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-              <option value="">— Không chọn —</option>
+              <option value="">— {t('Không chọn')} —</option>
               {cats.map((c) => (<option key={c.id} value={c.id}>{c.icon} {c.name}</option>))}
             </select>
-            <button type="button" className="btn-ghost category-add-button" aria-label="Thêm danh mục" title="Thêm danh mục" onClick={() => { setErr(''); setShowCategoryForm((shown) => !shown); }}>+</button>
+            <button type="button" className="btn-ghost category-add-button" aria-label={t('Thêm danh mục')} title={t('Thêm danh mục')} onClick={() => { setErr(''); setShowCategoryForm((shown) => !shown); }}>+</button>
           </div>
         </Field>
       ) : null}
       {showCategoryForm && type !== 'transfer' ? (
         <div className="category-create-panel">
-          <Field label={`Tên danh mục ${type === 'income' ? 'thu' : 'chi'}`}>
+          <Field label={type === 'income' ? 'Tên danh mục thu' : 'Tên danh mục chi'}>
             <input
               autoFocus
               value={newCategoryName}
               onChange={(e) => setNewCategoryName(e.target.value)}
-              placeholder="Nhập tên danh mục"
+              placeholder={t('Nhập tên danh mục')}
               maxLength={60}
             />
           </Field>
           <div className="category-create-actions">
-            <button type="button" className="btn-ghost" onClick={() => { setShowCategoryForm(false); setNewCategoryName(''); }}>Hủy</button>
+            <button type="button" className="btn-ghost" onClick={() => { setShowCategoryForm(false); setNewCategoryName(''); }}>{t('Hủy')}</button>
             <button type="button" disabled={savingCategory} onClick={() => { void createCategory(); }}>
-              {savingCategory ? 'Đang thêm…' : 'Thêm danh mục'}
+              {savingCategory ? t('Đang thêm…') : t('Thêm danh mục')}
             </button>
           </div>
         </div>
@@ -171,14 +173,14 @@ export default function TransactionForm({ state, onDone, initialType = 'income' 
       {type === 'income' ? (
         <label className="check-row">
           <input type="checkbox" checked={isSale} onChange={(e) => setIsSale(e.target.checked)} />
-          Bán hàng từ kho (tự trừ tồn, tự tính lãi)
+          {t('Bán hàng từ kho (tự trừ tồn, tự tính lãi)')}
         </label>
       ) : null}
       {isSale ? (
         <>
           <Field label="Sản phẩm">
             <select value={productId} onChange={(e) => { setProductId(e.target.value); setVariantId(''); setImei(''); }}>
-              <option value="">— Chọn sản phẩm —</option>
+              <option value="">— {t('Chọn sản phẩm')} —</option>
               {products.map((p) => (
                 <option key={p.id} value={p.id}>{p.name} — tồn {p.stock} • {fmtVND(p.sale_price)}</option>
               ))}
@@ -187,7 +189,7 @@ export default function TransactionForm({ state, onDone, initialType = 'income' 
           {variants.length > 0 ? (
             <Field label="Biến thể (màu / size / dung lượng)">
               <select value={variantId} onChange={(e) => { setVariantId(e.target.value); setImei(''); }}>
-                <option value="">— Dùng giá chung của sản phẩm —</option>
+                <option value="">— {t('Dùng giá chung của sản phẩm')} —</option>
                 {variants.map((v) => (
                   <option key={v.id} value={v.id}>{v.name} — tồn {v.stock} • {fmtVND(v.sale_price)}</option>
                 ))}
@@ -200,21 +202,21 @@ export default function TransactionForm({ state, onDone, initialType = 'income' 
           {availableImeis.length > 0 ? (
             <Field label="IMEI / Serial cụ thể">
               <select value={imei} onChange={(e) => setImei(e.target.value)}>
-                <option value="">— Không chọn IMEI —</option>
+                <option value="">— {t('Không chọn IMEI')} —</option>
                 {availableImeis.map((i) => (<option key={i} value={i}>{i}</option>))}
               </select>
             </Field>
           ) : null}
           <div className="profit-box">
-            Giá bán: {fmtVND(salePrice)} × {qty} = <b>{fmtVND(computedAmount)}</b><br />
-            Giá vốn: {fmtVND(costPrice)} × {qty} = {fmtVND(qty * costPrice)}<br />
-            Lãi dự kiến: <b style={{ color: '#34c759' }}>{fmtVND(computedProfit ?? 0)}</b>
+            {t('Giá bán:')} {fmtVND(salePrice)} × {qty} = <b>{fmtVND(computedAmount)}</b><br />
+            {t('Giá vốn:')} {fmtVND(costPrice)} × {qty} = {fmtVND(qty * costPrice)}<br />
+            {t('Lãi dự kiến:')} <b style={{ color: '#34c759' }}>{fmtVND(computedProfit ?? 0)}</b>
           </div>
         </>
       ) : (
         <Field label="Số tiền (đ)">
-          <input type="number" min={0} placeholder="VD: 500000" value={amount} onChange={(e) => setAmount(e.target.value)} required />
-          <div className="amount-shortcuts" aria-label="Gợi ý số tiền">
+          <input type="number" min={0} placeholder={t('VD: 500000')} value={amount} onChange={(e) => setAmount(e.target.value)} required />
+          <div className="amount-shortcuts" aria-label={t('Gợi ý số tiền')}>
             {[50000, 100000, 200000, 500000, 1000000, 5000000].map((value) => (
               <button key={value} type="button" className="amount-shortcut" onClick={() => {
                 setAmount((current) => String((Number(current) || 0) + value));
@@ -227,17 +229,17 @@ export default function TransactionForm({ state, onDone, initialType = 'income' 
         <input type="datetime-local" step={1} value={date} onChange={(e) => setDate(e.target.value)} required />
       </Field>
       <Field label="Ghi chú">
-        <input placeholder="VD: Bán cho khách Anh Tuấn" value={note} onChange={(e) => setNote(e.target.value)} />
+        <input placeholder={t('VD: Bán cho khách Anh Tuấn')} value={note} onChange={(e) => setNote(e.target.value)} />
       </Field>
       {type !== 'transfer' ? (
         <div className="form-row">
           <Field label="Đánh dấu thuế (loại thuế)">
             <select value={taxType} onChange={(e) => { setTaxType(e.target.value); setTaxRate(''); }}>
-              <option value="">— Không đánh dấu thuế —</option>
+              <option value="">— {t('Không đánh dấu thuế')} —</option>
               <option value="VAT">VAT</option>
               <option value="TNCN">TNCN</option>
               <option value="TNDN">TNDN</option>
-              <option value="other">Thuế khác</option>
+              <option value="other">{t('Thuế khác')}</option>
             </select>
           </Field>
           <Field label="Thuế suất tham chiếu (nhập theo hồ sơ, nếu cần)">
@@ -246,10 +248,10 @@ export default function TransactionForm({ state, onDone, initialType = 'income' 
         </div>
       ) : null}
       <fieldset className="fieldset">
-        <legend>Hóa đơn (đính kèm / quét)</legend>
+        <legend>{t('Hóa đơn (đính kèm / quét)')}</legend>
         <div className="flex-row">
           <label className="btn-secondary" style={{ cursor: 'pointer' }}>
-            📎 Đính kèm ảnh hóa đơn
+            {t('📎 Đính kèm ảnh hóa đơn')}
             <input type="file" accept="image/jpeg,image/png" style={{ display: 'none' }} onChange={async (e) => {
               const f = e.target.files?.[0]; if (!f) return;
               try { setReceiptImage(await fileToBase64(f)); setScanMsg(`Đã đính kèm ${f.name}.`); }
@@ -257,7 +259,7 @@ export default function TransactionForm({ state, onDone, initialType = 'income' 
             }} />
           </label>
           <label className="btn-secondary" style={{ cursor: 'pointer' }}>
-            🧾 Quét hóa đơn bằng AI
+            {t('🧾 Quét hóa đơn bằng AI')}
             <input type="file" accept="image/jpeg,image/png" style={{ display: 'none' }} onChange={async (e) => {
               const f = e.target.files?.[0]; if (!f) return;
               try {
@@ -273,14 +275,14 @@ export default function TransactionForm({ state, onDone, initialType = 'income' 
             }} />
           </label>
           {receiptImage ? (
-            <button type="button" className="btn-ghost" onClick={() => { setReceiptImage(null); setScanMsg(''); }}>Gỡ ảnh</button>
+            <button type="button" className="btn-ghost" onClick={() => { setReceiptImage(null); setScanMsg(''); }}>{t('Gỡ ảnh')}</button>
           ) : null}
         </div>
-        {scanMsg ? <p className="muted" style={{ fontSize: 13 }}>{scanMsg}</p> : null}
-        {receiptImage ? <img src={receiptImage} alt="Hóa đơn đính kèm" decoding="async" style={{ maxWidth: '100%', maxHeight: 180, objectFit: 'contain', borderRadius: 12, marginTop: 8 }} /> : null}
+        {scanMsg ? <p className="muted" style={{ fontSize: 13 }}>{t(scanMsg)}</p> : null}
+        {receiptImage ? <img src={receiptImage} alt={t('Hóa đơn đính kèm')} decoding="async" style={{ maxWidth: '100%', maxHeight: 180, objectFit: 'contain', borderRadius: 12, marginTop: 8 }} /> : null}
       </fieldset>
-      {err ? <p className="error">{err}</p> : null}
-      <button type="submit" disabled={saving}>{saving ? 'Đang lưu…' : 'Lưu giao dịch'}</button>
+      {err ? <p className="error">{t(err)}</p> : null}
+      <button type="submit" disabled={saving}>{saving ? t('Đang lưu…') : t('Lưu giao dịch')}</button>
     </form>
   );
 }

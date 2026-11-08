@@ -12,6 +12,7 @@ import { fmtDate, fmtVND, monthISO, todayISO, transactionDateTime } from '@/lib/
 import { WALLET_TYPE_LABELS } from '@/lib/types';
 import type { Debt, DebtPayment, Goal, TxType, Wallet } from '@/lib/types';
 import { fileToBase64 } from '@/lib/receipt';
+import { usePreferences } from '@/lib/preferences';
 
 function getDebtHistoryRows(debt: Debt): Array<{ payment: DebtPayment; balanceAfter: number }> {
   const history = debt.payment_history ?? [];
@@ -31,6 +32,8 @@ function getDebtHistoryRows(debt: Debt): Array<{ payment: DebtPayment; balanceAf
 export default function Dashboard() {
   const router = useRouter();
   const data = useAppData();
+  const { t } = usePreferences();
+  const taxLabel = t('Thuế');
   const { state } = data;
   const [showTx, setShowTx] = useState(false);
   const [txType, setTxType] = useState<TxType>('income');
@@ -118,12 +121,12 @@ export default function Dashboard() {
         action={
           <button className="btn-small" disabled={!data.currentWorkspace}
             onClick={() => setDebtEditor(isBorrow ? 'new-borrow' : 'new-lend')}>
-            {isBorrow ? '+ Thêm khoản nợ' : '+ Thêm khoản cho vay'}
+            {isBorrow ? t('+ Thêm khoản nợ') : t('+ Thêm khoản cho vay')}
           </button>
         }
       >
         {rows.length === 0 ? (
-          <p className="muted">{isBorrow ? 'Chưa có khoản nợ phải trả.' : 'Chưa có khoản cho vay / khách nợ.'}</p>
+          <p className="muted">{t(isBorrow ? 'Chưa có khoản nợ phải trả.' : 'Chưa có khoản cho vay / khách nợ.')}</p>
         ) : (
           <div className="row-list">
             {rows.map((d) => (
@@ -160,7 +163,7 @@ export default function Dashboard() {
                       </div>
                     </details>
                   ) : d.paid > 0 ? (
-                    <div className="sub">Số đã ghi trước đây; chưa có lịch sử chi tiết.</div>
+                    <div className="sub">{t('Số đã ghi trước đây; chưa có lịch sử chi tiết.')}</div>
                   ) : null}
                   <div className="debt-balance-summary">
                     Còn {isBorrow ? 'nợ' : 'phải thu'} <b>{fmtVND(Math.max(0, d.amount - d.paid))}</b>
@@ -184,7 +187,7 @@ export default function Dashboard() {
                       {isBorrow ? 'Ghi trả nợ' : 'Ghi thu nợ'}
                     </button>
                   ) : null}
-                  <button className="btn-ghost btn-small" onClick={() => setDebtEditor(d)}>Sửa</button>
+                  <button className="btn-ghost btn-small" onClick={() => setDebtEditor(d)}>{t('Sửa')}</button>
                   <button className="btn-ghost btn-small" onClick={() => {
                     if (confirm(`Xóa khoản "${d.name}"?`)) data.deleteDebt(d.id);
                   }}>Xóa</button>
@@ -197,13 +200,13 @@ export default function Dashboard() {
         )}
         <div className={`debt-progress-summary ${isBorrow ? 'debt-progress-borrow' : 'debt-progress-lend'}`}>
           <div className="debt-progress-totals">
-            <span>Tổng <b>{fmtVND(total)}</b></span>
-            <span>Đã {isBorrow ? 'trả' : 'thu'} <b>{fmtVND(paid)}</b></span>
-            <span>Còn <b>{fmtVND(remaining)}</b></span>
+            <span>{t('Tổng')} <b>{fmtVND(total)}</b></span>
+            <span>{t('Đã')} {t(isBorrow ? 'trả' : 'thu')} <b>{fmtVND(paid)}</b></span>
+            <span>{t('Còn')} <b>{fmtVND(remaining)}</b></span>
             <b className="debt-progress-percent">{progress}%</b>
           </div>
           <div className="debt-milestone-track" role="img"
-            aria-label={`Đã ${isBorrow ? 'trả' : 'thu'} ${progress}%`}>
+            aria-label={`${t('Đã')} ${t(isBorrow ? 'trả' : 'thu')} ${progress}%`}>
             <div className="debt-milestone-fill" style={{ width: `${progress}%` }} />
             {[25, 50, 75, 100].map((milestone) => (
               <span key={milestone}
@@ -213,7 +216,7 @@ export default function Dashboard() {
           </div>
         </div>
         <p className="muted" style={{ fontSize: 12 }}>
-          Theo dõi công nợ, không tự động cộng/trừ số dư ví.
+          {t('Theo dõi công nợ, không tự động cộng/trừ số dư ví.')}
         </p>
       </GlassCard>
     );
@@ -222,41 +225,41 @@ export default function Dashboard() {
   return (
     <AppShell>
       <section className="balance-hero">
-        <div className="balance-label">Tổng số dư · {wallets.length} ví</div>
+        <div className="balance-label">{t('Tổng số dư')} · {wallets.length} {t('Ví')}</div>
         <div className="balance-total">{fmtVND(totalBalance)}</div>
         <div className="balance-breakdown">
-          <div><span>↓ Thu tháng này</span><strong>{fmtVND(income)}</strong></div>
-          <div><span>↑ Chi tháng này</span><strong>{fmtVND(expense)}</strong></div>
-          <div><span>Dòng tiền ròng</span><strong>{netCashflow >= 0 ? '+' : '−'}{fmtVND(Math.abs(netCashflow))}</strong></div>
-          <div><span>Thu nhập hôm nay (thu − chi)</span><strong>{todayNet >= 0 ? '+' : '−'}{fmtVND(Math.abs(todayNet))}</strong></div>
+          <div><span>↓ {t('Thu tháng này')}</span><strong>{fmtVND(income)}</strong></div>
+          <div><span>↑ {t('Chi tháng này')}</span><strong>{fmtVND(expense)}</strong></div>
+          <div><span>{t('Dòng tiền ròng')}</span><strong>{netCashflow >= 0 ? '+' : '−'}{fmtVND(Math.abs(netCashflow))}</strong></div>
+          <div><span>{t('Thu nhập hôm nay (thu − chi)')}</span><strong>{todayNet >= 0 ? '+' : '−'}{fmtVND(Math.abs(todayNet))}</strong></div>
         </div>
       </section>
 
-      <div className="quick-actions" aria-label="Thêm nhanh giao dịch">
+      <div className="quick-actions" aria-label={t('Thêm nhanh giao dịch')}>
         <button className="quick-action" onClick={() => openTransaction('income')}>
-          <span className="quick-action-icon income-icon">↓</span><b>Ghi thu</b>
+          <span className="quick-action-icon income-icon">↓</span><b>{t('Ghi thu')}</b>
         </button>
         <button className="quick-action" onClick={() => openTransaction('expense')}>
-          <span className="quick-action-icon expense-icon">↑</span><b>Ghi chi</b>
+          <span className="quick-action-icon expense-icon">↑</span><b>{t('Ghi chi')}</b>
         </button>
         <button className="quick-action" onClick={() => openTransaction('transfer')}>
-          <span className="quick-action-icon transfer-icon">⇄</span><b>Chuyển ví</b>
+          <span className="quick-action-icon transfer-icon">⇄</span><b>{t('Chuyển ví')}</b>
         </button>
         <button className="quick-action" onClick={() => openTransaction('expense')}>
-          <span className="quick-action-icon scan-icon">▣</span><b>Quét hóa đơn</b>
+          <span className="quick-action-icon scan-icon">▣</span><b>{t('Quét hóa đơn')}</b>
         </button>
       </div>
 
       {reminders.length > 0 ? (
         <section className="dashboard-reminders">
-          <h2>Cần chú ý</h2>
+          <h2>{t('Cần chú ý')}</h2>
           {reminders.map((r) => {
             const overdue = r.next_date < today;
             return (
               <div className="dashboard-reminder" key={r.id}>
                 <span className={overdue ? 'reminder-clock overdue' : 'reminder-clock'} aria-hidden="true">◷</span>
                 <div>
-                  <b>{r.title}{overdue ? ' — quá hạn' : ''}</b>
+                  <b>{r.title}{overdue ? ` — ${t('quá hạn')}` : ''}</b>
                   <span>{overdue ? ` (${fmtDate(r.next_date)})` : ` · ${fmtDate(r.next_date)}`}</span>
                 </div>
                 {r.amount ? <strong>{fmtVND(r.amount)}</strong> : null}
@@ -266,7 +269,7 @@ export default function Dashboard() {
                     createExpense = confirm(`Đánh dấu "${r.title}" đã xử lý và ghi thêm 1 giao dịch Chi ${fmtVND(r.amount)} vào ví ${wallets[0].name}?\n\nBấm OK = ghi Chi + dời sang kỳ tiếp.\nBấm Hủy = chỉ dời sang kỳ tiếp, không ghi Chi.`);
                   }
                   data.completeReminder(r.id, { createExpense, walletId: wallets[0]?.id ?? null });
-                }}>Xong</button>
+                }}>{t('Xong')}</button>
               </div>
             );
           })}
@@ -278,23 +281,23 @@ export default function Dashboard() {
           className="btn-small"
           disabled={!data.currentWorkspace}
           onClick={() => { setEditWallet(null); setShowWallet(true); }}
-        >+ Thêm ví</button>
+        >{t('+ Thêm ví')}</button>
       }>
         {!data.currentWorkspace ? (
           <p className="muted">
-            Cần tạo không gian làm việc trước khi thêm ví. Vào <Link href="/cai-dat">Cài đặt → Tạo không gian mới</Link>.
+            {t('Cần tạo không gian làm việc trước khi thêm ví. Vào')} <Link href="/cai-dat">{t('Cài đặt → Tạo không gian mới')}</Link>.
           </p>
-        ) : wallets.length === 0 ? <p className="muted">Chưa có ví nào.</p> : (
+        ) : wallets.length === 0 ?         <p className="muted">{t('Chưa có ví nào.')}</p> : (
           <div className="row-list">
             {displayedWallets.map((w) => (
               <div key={w.id} className="row-item">
-                <div><b>{w.name}</b><div className="sub">{WALLET_TYPE_LABELS[w.type]}</div></div>
+                <div><b>{w.name}</b><div className="sub">{t(WALLET_TYPE_LABELS[w.type])}</div></div>
                 <div className="dashboard-wallet-actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <b>{fmtVND(w.balance)}</b>
-                  <button className="btn-ghost btn-small" onClick={() => { setEditWallet(w); setShowWallet(true); }}>Sửa</button>
+                  <button className="btn-ghost btn-small" onClick={() => { setEditWallet(w); setShowWallet(true); }}>{t('Sửa')}</button>
                   <button className="btn-ghost btn-small" onClick={() => {
                     if (confirm(`Xóa ví "${w.name}" và toàn bộ giao dịch của ví này?`)) data.deleteWallet(w.id);
-                  }}>Xóa</button>
+                  }}>{t('Xóa')}</button>
                 </div>
               </div>
             ))}
@@ -302,44 +305,44 @@ export default function Dashboard() {
         )}
         {wallets.length > 5 ? (
           <button className="btn-ghost btn-small list-expand-button" onClick={() => setShowAllWallets((shown) => !shown)}>
-            {showAllWallets ? 'Thu gọn' : `Xem thêm (${wallets.length - 5})`}
+            {showAllWallets ? t('Thu gọn') : `${t('Xem thêm')} (${wallets.length - 5})`}
           </button>
         ) : null}
       </GlassCard>
 
       <GlassCard title="Giao dịch gần đây" action={
-        <button className="btn-small" onClick={() => setShowTx(true)}>+ Thêm giao dịch</button>
+        <button className="btn-small" onClick={() => setShowTx(true)}>{t('+ Thêm giao dịch')}</button>
       }>
-        {txs.length === 0 ? <p className="muted">Chưa có giao dịch — bấm “Thêm giao dịch” để ghi Thu/Chi đầu tiên.</p> : (
+        {txs.length === 0 ? <p className="muted">{t('Chưa có giao dịch — bấm “Thêm giao dịch” để ghi Thu/Chi đầu tiên.')}</p> : (
           <div className="row-list">
-            {displayedTransactions.map((t) => (
-              <div key={t.id} className="row-item">
+            {displayedTransactions.map((tx) => (
+              <div key={tx.id} className="row-item">
                 <div>
-                  <b style={{ color: t.type === 'income' ? '#34c759' : t.type === 'expense' ? '#ff3b30' : '#0a84ff' }}>
-                    {t.type === 'income' ? '+' : t.type === 'expense' ? '−' : '⇄'} {fmtVND(t.amount)}
+                  <b style={{ color: tx.type === 'income' ? '#34c759' : tx.type === 'expense' ? '#ff3b30' : '#0a84ff' }}>
+                    {tx.type === 'income' ? '+' : tx.type === 'expense' ? '−' : '⇄'} {fmtVND(tx.amount)}
                   </b>
                   <div className="sub">
-                    {fmtDate(t.date)} {new Date(transactionDateTime(t)).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} • {catName(t.category_id)} • {walletName(t.wallet_id)}
-                    {t.profit ? ` • Lãi ${fmtVND(t.profit)}` : ''}{t.note ? ` • ${t.note}` : ''}
-                    {t.tax_type ? ` • Thuế ${t.tax_type}${t.tax_rate ? ` ${(t.tax_rate * 100).toLocaleString('vi-VN')}%` : ''}` : ''}
-                    {t.receipt_image ? ' • 🧾 có hóa đơn' : ''}
+                    {fmtDate(tx.date)} {new Date(transactionDateTime(tx)).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} • {catName(tx.category_id)} • {walletName(tx.wallet_id)}
+                    {tx.profit ? ` • ${t('Lãi')} ${fmtVND(tx.profit)}` : ''}{tx.note ? ` • ${tx.note}` : ''}
+                    {tx.tax_type ? ` • ${taxLabel} ${tx.tax_type}${tx.tax_rate ? ` ${(tx.tax_rate * 100).toLocaleString('vi-VN')}%` : ''}` : ''}
+                    {tx.receipt_image ? ` • 🧾 ${t('có hóa đơn')}` : ''}
                   </div>
                 </div>
-                <button className="btn-ghost btn-small" onClick={() => { setDeleteTxError(''); setConfirmDeleteTx(t.id); }}>Xóa</button>
+                <button className="btn-ghost btn-small" onClick={() => { setDeleteTxError(''); setConfirmDeleteTx(tx.id); }}>{t('Xóa')}</button>
               </div>
             ))}
           </div>
         )}
         {txs.length > 5 ? (
           <button className="btn-ghost btn-small list-expand-button" onClick={() => setShowAllTransactions((shown) => !shown)}>
-            {showAllTransactions ? 'Thu gọn' : `Xem thêm (${txs.length - 5})`}
+            {showAllTransactions ? t('Thu gọn') : `${t('Xem thêm')} (${txs.length - 5})`}
           </button>
         ) : null}
       </GlassCard>
 
       <div className="flex-row" style={{ alignItems: 'stretch' }}>
-        <GlassCard title={`Ngân sách tháng ${month}`}>
-          {budgets.length === 0 ? <p className="muted">Chưa đặt ngân sách tháng này. Đặt ở trang Cài đặt → Ngân sách.</p> : (
+        <GlassCard title={`${t('Ngân sách tháng')} ${month}`}>
+          {budgets.length === 0 ? <p className="muted">{t('Chưa đặt ngân sách tháng này. Đặt ở trang Cài đặt → Ngân sách.')}</p> : (
             <div className="row-list">
               {budgets.map((b) => {
                 const spent = monthTxs
@@ -353,7 +356,7 @@ export default function Dashboard() {
                       <span>{fmtVND(spent)} / {fmtVND(b.amount)} ({pct}%)</span>
                     </div>
                     <div className={`progress ${spent > b.amount ? 'over' : ''}`}><div style={{ width: `${pct}%` }} /></div>
-                    {spent > b.amount ? <p className="error">Vượt ngân sách {fmtVND(spent - b.amount)}!</p> : null}
+                    {spent > b.amount ? <p className="error">{t('Vượt ngân sách')} {fmtVND(spent - b.amount)}!</p> : null}
                   </div>
                 );
               })}
@@ -362,10 +365,10 @@ export default function Dashboard() {
         </GlassCard>
         <GlassCard title="Mục tiêu tiết kiệm" action={
           <button className="btn-small" disabled={!data.currentWorkspace} onClick={() => setGoalEditor('new')}>
-            + Thêm mục tiêu
+            + {t('Thêm mục tiêu')}
           </button>
         }>
-          {goals.length === 0 ? <p className="muted">Chưa có mục tiêu.</p> : (
+          {goals.length === 0 ? <p className="muted">{t('Chưa có mục tiêu.')}</p> : (
             <div className="row-list">
               {goals.map((g) => {
                 const pct = g.target > 0 ? Math.min(100, Math.round((g.saved / g.target) * 100)) : 0;
@@ -373,25 +376,25 @@ export default function Dashboard() {
                   <div key={g.id} className="row-item" style={{ alignItems: 'flex-start' }}>
                     <div style={{ flex: 1 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                        <span><b>{g.name}</b>{g.deadline ? <span className="sub"> · Hạn {fmtDate(g.deadline)}</span> : null}</span>
+                        <span><b>{g.name}</b>{g.deadline ? <span className="sub"> · {t('Hạn')} {fmtDate(g.deadline)}</span> : null}</span>
                         <span>{fmtVND(g.saved)} / {fmtVND(g.target)}</span>
                       </div>
                       <div className="progress"><div style={{ width: `${pct}%` }} /></div>
-                      <div className="sub">{pct}% hoàn thành</div>
+                      <div className="sub">{pct}% {t('hoàn thành')}</div>
                     </div>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      <button className="btn-small" onClick={() => setGoalContribution(g)}>Góp tiền</button>
-                      <button className="btn-ghost btn-small" onClick={() => setGoalEditor(g)}>Sửa</button>
+                      <button className="btn-small" onClick={() => setGoalContribution(g)}>{t('Góp tiền')}</button>
+                      <button className="btn-ghost btn-small" onClick={() => setGoalEditor(g)}>{t('Sửa')}</button>
                       <button className="btn-ghost btn-small" onClick={() => {
                         if (confirm(`Xóa mục tiêu "${g.name}"?`)) data.deleteGoal(g.id);
-                      }}>Xóa</button>
+                      }}>{t('Xóa')}</button>
                     </div>
                   </div>
                 );
               })}
             </div>
           )}
-          <p className="muted" style={{ fontSize: 12 }}>Ghi nhận tiến độ tiết kiệm, không tự động thay đổi số dư ví.</p>
+          <p className="muted" style={{ fontSize: 12 }}>{t('Ghi nhận tiến độ tiết kiệm, không tự động thay đổi số dư ví.')}</p>
         </GlassCard>
       </div>
 
@@ -454,15 +457,15 @@ export default function Dashboard() {
       ) : null}
       {confirmDeleteTx ? (
         <Modal title="Xóa giao dịch?" onClose={() => { setConfirmDeleteTx(null); setDeleteTxError(''); }}>
-          <p>Giao dịch liên quan đến kho sẽ hoàn tác tồn kho và lịch sử nhập / xuất; số dư ví cũng được hoàn lại. Bạn chắc chắn muốn xóa?</p>
-          {deleteTxError ? <p className="error">{deleteTxError}</p> : null}
+          <p>{t('Giao dịch liên quan đến kho sẽ hoàn tác tồn kho và lịch sử nhập / xuất; số dư ví cũng được hoàn lại. Bạn chắc chắn muốn xóa?')}</p>
+          {deleteTxError ? <p className="error">{t(deleteTxError)}</p> : null}
           <div className="flex-row">
             <button className="btn-danger" onClick={async () => {
               const error = await data.deleteTransaction(confirmDeleteTx);
               if (error) { setDeleteTxError(error); return; }
               setConfirmDeleteTx(null);
-            }}>Xóa giao dịch</button>
-            <button className="btn-secondary" onClick={() => { setConfirmDeleteTx(null); setDeleteTxError(''); }}>Hủy</button>
+            }}>{t('Xóa giao dịch')}</button>
+            <button className="btn-secondary" onClick={() => { setConfirmDeleteTx(null); setDeleteTxError(''); }}>{t('Hủy')}</button>
           </div>
         </Modal>
       ) : null}
@@ -474,6 +477,7 @@ function GoalFormModal({ goal, onClose, onSaved }: {
   goal: Goal | null; onClose: () => void; onSaved: () => void;
 }) {
   const data = useAppData();
+  const { t } = usePreferences();
   const [name, setName] = useState(goal?.name ?? '');
   const [target, setTarget] = useState(goal ? String(goal.target) : '');
   const [saved, setSaved] = useState(goal ? String(goal.saved) : '0');
@@ -519,10 +523,10 @@ function GoalFormModal({ goal, onClose, onSaved }: {
         <Field label="Hạn hoàn thành (không bắt buộc)">
           <input type="date" value={deadline} onChange={(event) => setDeadline(event.target.value)} />
         </Field>
-        {error ? <p className="error">{error}</p> : null}
+        {error ? <p className="error">{t(error)}</p> : null}
         <div className="flex-row">
-          <button type="submit" disabled={saving}>{saving ? 'Đang lưu…' : goal ? 'Lưu thay đổi' : 'Tạo mục tiêu'}</button>
-          <button type="button" className="btn-secondary" onClick={onClose}>Hủy</button>
+          <button type="submit" disabled={saving}>{saving ? t('Đang lưu…') : goal ? t('Lưu thay đổi') : t('Tạo mục tiêu')}</button>
+          <button type="button" className="btn-secondary" onClick={onClose}>{t('Hủy')}</button>
         </div>
       </form>
     </Modal>
@@ -531,6 +535,7 @@ function GoalFormModal({ goal, onClose, onSaved }: {
 
 function DebtImageSlot({ debt }: { debt: Debt }) {
   const data = useAppData();
+  const { t } = usePreferences();
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [viewing, setViewing] = useState(false);
@@ -604,7 +609,7 @@ function DebtImageSlot({ debt }: { debt: Debt }) {
         <label className={`debt-image-slot ${saving ? 'is-saving' : ''}`}>
           <span className="debt-image-placeholder">
             <b aria-hidden="true">+</b>
-            <span>Thêm ảnh</span>
+            <span>{t('Thêm ảnh')}</span>
           </span>
           <input type="file" accept="image/jpeg,image/png" disabled={saving}
             aria-label={`Thêm ảnh cho ${debt.name}`} onChange={handleImageChange} />
@@ -613,28 +618,28 @@ function DebtImageSlot({ debt }: { debt: Debt }) {
       {debt.image ? (
         <div className="debt-image-actions">
           <label className="debt-image-remove">
-            Thay ảnh
+            {t('Thay ảnh')}
             <input type="file" accept="image/jpeg,image/png" disabled={saving}
               aria-label={`Thay ảnh cho ${debt.name}`} onChange={handleImageChange} />
           </label>
           <button className="debt-image-remove" disabled={saving} onClick={() => void saveImage(null)}>
-            Gỡ
+            {t('Gỡ')}
           </button>
         </div>
       ) : null}
-      {error ? <span className="debt-image-error" role="alert">{error}</span> : null}
+      {error ? <span className="debt-image-error" role="alert">{t(error)}</span> : null}
       {viewing && debt.image ? (
         createPortal(<div className="debt-image-viewer" role="dialog" aria-modal="true" aria-label={`Xem ảnh: ${debt.name}`}
           onClick={closeViewer}>
           <div className="debt-image-viewer-toolbar" onClick={(event) => event.stopPropagation()}>
             <span>{debt.name}</span>
-            <div className="debt-image-zoom-controls" aria-label="Điều khiển thu phóng">
-              <button onClick={() => changeZoom(zoom - 0.25)} disabled={zoom <= 1} aria-label="Thu nhỏ">−</button>
-              <button className="debt-image-zoom-level" onClick={() => changeZoom(1)} aria-label="Đặt lại kích thước">
+            <div className="debt-image-zoom-controls" aria-label={t('Điều khiển thu phóng')}>
+              <button onClick={() => changeZoom(zoom - 0.25)} disabled={zoom <= 1} aria-label={t('Thu nhỏ')}>−</button>
+              <button className="debt-image-zoom-level" onClick={() => changeZoom(1)} aria-label={t('Đặt lại kích thước')}>
                 {Math.round(zoom * 100)}%
               </button>
-              <button onClick={() => changeZoom(zoom + 0.25)} disabled={zoom >= 5} aria-label="Phóng to">+</button>
-              <button className="debt-image-viewer-close" onClick={closeViewer} aria-label="Đóng">✕</button>
+              <button onClick={() => changeZoom(zoom + 0.25)} disabled={zoom >= 5} aria-label={t('Phóng to')}>+</button>
+              <button className="debt-image-viewer-close" onClick={closeViewer} aria-label={t('Đóng')}>✕</button>
             </div>
           </div>
           <div className={`debt-image-viewer-stage ${zoom > 1 ? 'is-zoomed' : ''}`}
@@ -660,7 +665,7 @@ function DebtImageSlot({ debt }: { debt: Debt }) {
             <img src={debt.image} alt={`Ảnh đính kèm cho ${debt.name}`}
               style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }} />
           </div>
-          <span className="debt-image-viewer-hint">Lăn chuột để thu phóng · Kéo ảnh khi đã phóng lớn · Esc để đóng</span>
+          <span className="debt-image-viewer-hint">{t('Lăn chuột để thu phóng · Kéo ảnh khi đã phóng lớn · Esc để đóng')}</span>
         </div>, document.body)
       ) : null}
     </div>
@@ -671,6 +676,7 @@ function DebtFormModal({ debt, initialKind, onClose, onSaved }: {
   debt: Debt | null; initialKind: Debt['kind']; onClose: () => void; onSaved: () => void;
 }) {
   const data = useAppData();
+  const { t } = usePreferences();
   const [name, setName] = useState(debt?.name ?? '');
   const [kind, setKind] = useState<Debt['kind']>(debt?.kind ?? initialKind);
   const [amount, setAmount] = useState(debt ? String(debt.amount) : '');
@@ -713,8 +719,8 @@ function DebtFormModal({ debt, initialKind, onClose, onSaved }: {
         </Field>
         <Field label="Loại khoản">
           <select value={kind} onChange={(event) => setKind(event.target.value as Debt['kind'])}>
-            <option value="borrow">Mình đi vay (theo dõi số đã trả)</option>
-            <option value="lend">Mình cho vay / khách nợ (theo dõi số đã thu)</option>
+            <option value="borrow">{t('Mình đi vay (theo dõi số đã trả)')}</option>
+            <option value="lend">{t('Mình cho vay / khách nợ (theo dõi số đã thu)')}</option>
           </select>
         </Field>
         <Field label="Tổng số tiền (đ)">
@@ -724,16 +730,16 @@ function DebtFormModal({ debt, initialKind, onClose, onSaved }: {
           <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} required />
         </Field>
         {debt ? (
-          <p className="muted">Đã ghi nhận: <b>{fmtVND(debt.paid)}</b>. Dùng nút ghi trả/thu ở danh sách để lưu từng lần kèm ngày giờ và ghi chú.</p>
+          <p className="muted">{t('Đã ghi nhận:')} <b>{fmtVND(debt.paid)}</b>. {t('Dùng nút ghi trả/thu ở danh sách để lưu từng lần kèm ngày giờ và ghi chú.')}</p>
         ) : null}
         <Field label="Ngày đến hạn (không bắt buộc)">
           <input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
         </Field>
-        <p className="muted" style={{ fontSize: 12 }}>Thông tin này chỉ theo dõi công nợ, không tự động thay đổi số dư ví.</p>
-        {error ? <p className="error">{error}</p> : null}
+        <p className="muted" style={{ fontSize: 12 }}>{t('Thông tin này chỉ theo dõi công nợ, không tự động thay đổi số dư ví.')}</p>
+        {error ? <p className="error">{t(error)}</p> : null}
         <div className="flex-row">
-          <button type="submit" disabled={saving}>{saving ? 'Đang lưu…' : debt ? 'Lưu thay đổi' : 'Tạo khoản'}</button>
-          <button type="button" className="btn-secondary" onClick={onClose}>Hủy</button>
+          <button type="submit" disabled={saving}>{saving ? t('Đang lưu…') : debt ? t('Lưu thay đổi') : t('Tạo khoản')}</button>
+          <button type="button" className="btn-secondary" onClick={onClose}>{t('Hủy')}</button>
         </div>
       </form>
     </Modal>
@@ -748,6 +754,7 @@ function AmountActionModal({ title, actionLabel, maxAmount, noteLabel, onClose, 
   onClose: () => void;
   onSubmit: (amount: number, note?: string) => Promise<string | null>;
 }) {
+  const { t } = usePreferences();
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
@@ -777,7 +784,7 @@ function AmountActionModal({ title, actionLabel, maxAmount, noteLabel, onClose, 
   return (
     <Modal title={title} onClose={onClose}>
       <form className="form-grid" onSubmit={submit}>
-        {maxAmount !== undefined ? <p className="muted">Còn lại: <b>{fmtVND(maxAmount)}</b></p> : null}
+        {maxAmount !== undefined ? <p className="muted">{t('Còn')}: <b>{fmtVND(maxAmount)}</b></p> : null}
         <Field label="Số tiền (đ)">
           <input type="number" min={1} max={maxAmount} value={amount} onChange={(event) => setAmount(event.target.value)} required autoFocus />
         </Field>
@@ -786,10 +793,10 @@ function AmountActionModal({ title, actionLabel, maxAmount, noteLabel, onClose, 
             <input value={note} onChange={(event) => setNote(event.target.value)} placeholder="VD: Chuyển khoản, thu tiền mặt…" />
           </Field>
         ) : null}
-        {error ? <p className="error">{error}</p> : null}
+        {error ? <p className="error">{t(error)}</p> : null}
         <div className="flex-row">
-          <button type="submit" disabled={saving}>{saving ? 'Đang lưu…' : actionLabel}</button>
-          <button type="button" className="btn-secondary" onClick={onClose}>Hủy</button>
+          <button type="submit" disabled={saving}>{saving ? t('Đang lưu…') : t(actionLabel)}</button>
+          <button type="button" className="btn-secondary" onClick={onClose}>{t('Hủy')}</button>
         </div>
       </form>
     </Modal>

@@ -1,6 +1,8 @@
 import './globals.css';
 import type { Metadata, Viewport } from 'next';
 import { AppDataProvider } from '@/lib/data';
+import { PreferencesProvider } from '@/lib/preferences';
+import SiteFooter from '@/components/SiteFooter';
 
 export const metadata: Metadata = {
   title: 'Quản lý tài chính',
@@ -10,24 +12,14 @@ export const viewport: Viewport = { width: 'device-width', initialScale: 1, view
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="vi">
+    <html lang="vi" data-theme="light">
       <body>
-        <AppDataProvider>
-          <div className="page-container">{children}</div>
-          <footer className="site-footer">
-            <a
-              className="author-link"
-              href="https://www.facebook.com/Theplay.Hacker.ss/"
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Tác giả Thuận"
-            >
-              <span>Tác giả</span>
-              <strong>Thuận</strong>
-              <span className="author-sparkle" aria-hidden="true">✦</span>
-            </a>
-          </footer>
-        </AppDataProvider>
+        <PreferencesProvider>
+          <AppDataProvider>
+            <div className="page-container">{children}</div>
+            <SiteFooter />
+          </AppDataProvider>
+        </PreferencesProvider>
       </body>
     </html>
   );

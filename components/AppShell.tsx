@@ -8,6 +8,7 @@ import { setSessionUser, hasPin, verifyPin } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/client';
 import { BUSINESS_TYPE_LABELS, WORKSPACE_MODE_LABELS } from '@/lib/types';
 import { inferBusinessType } from '@/lib/tax-config';
+import { usePreferences } from '@/lib/preferences';
 
 const NAV = [
   { href: '/dashboard', label: 'Tổng quan', icon: '🏠' },
@@ -84,6 +85,7 @@ function PageLoadingSkeleton({ pathname }: { pathname: string }) {
 /** Khung chung cho các trang đã đăng nhập: header, chuyển workspace, menu. */
 export default function AppShell({ children }: { children: ReactNode }) {
   const { state, loading, switchWorkspace, currentWorkspace, syncError, clearSyncError, retryLoad } = useAppData();
+  const { t } = usePreferences();
   const pathname = usePathname();
   const router = useRouter();
   const [pinLocked, setPinLocked] = useState(false);
@@ -149,19 +151,19 @@ export default function AppShell({ children }: { children: ReactNode }) {
   async function unlock(e: React.FormEvent) {
     e.preventDefault();
     if (await verifyPin(pinInput)) { setPinLocked(false); setPinErr(''); }
-    else setPinErr('Mã PIN không đúng.');
+    else setPinErr(t('Mã PIN không đúng.'));
   }
 
   if (pinLocked) {
     return (
       <main className="glass" style={{ maxWidth: 420, margin: '80px auto' }}>
-        <h1>🔒 App đã khóa</h1>
-        <p className="muted">Nhập mã PIN để mở khóa.</p>
+        <h1>🔒 {t('App đã khóa')}</h1>
+        <p className="muted">{t('Nhập mã PIN để mở khóa.')}</p>
         <form onSubmit={unlock} className="form-grid">
-          <input type="password" inputMode="numeric" placeholder="Mã PIN" value={pinInput}
+          <input type="password" inputMode="numeric" placeholder={t('Mã PIN')} value={pinInput}
             onChange={(e) => setPinInput(e.target.value)} autoFocus />
           {pinErr ? <p className="error">{pinErr}</p> : null}
-          <button type="submit">Mở khóa</button>
+          <button type="submit">{t('Mở khóa')}</button>
         </form>
       </main>
     );
@@ -169,7 +171,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   if (loading) {
     return (
-      <div className="app-shell page-skeleton" role="status" aria-label="Đang tải dữ liệu" aria-busy="true">
+      <div className="app-shell page-skeleton" role="status" aria-label={t('Đang tải dữ liệu')} aria-busy="true">
         <header className="app-header page-skeleton-header" aria-hidden="true">
           <div className="page-skeleton-brand">
             <SkeletonBlock className="page-skeleton-brand-name" />
@@ -193,11 +195,11 @@ export default function AppShell({ children }: { children: ReactNode }) {
   if (!state && syncError) {
     return (
       <main className="glass" role="alert">
-        <h1>Không tải được dữ liệu</h1>
-        <p className="error">{syncError}</p>
+        <h1>{t('Không tải được dữ liệu')}</h1>
+        <p className="error">{t(syncError)}</p>
         <div className="flex-row">
-          <button type="button" onClick={retryLoad}>Thử tải lại</button>
-          <Link href="/auth"><button type="button" className="btn-secondary">Đăng nhập lại</button></Link>
+          <button type="button" onClick={retryLoad}>{t('Thử tải lại')}</button>
+          <Link href="/auth"><button type="button" className="btn-secondary">{t('Đăng nhập lại')}</button></Link>
         </div>
       </main>
     );
@@ -205,9 +207,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
   if (!state || !state.user) {
     return (
       <main className="glass">
-        <h1>Bạn chưa đăng nhập</h1>
-        <p className="muted">Vui lòng đăng nhập để xem dữ liệu của bạn.</p>
-        <p><Link href="/auth"><button>Đăng nhập / Đăng ký</button></Link></p>
+        <h1>{t('Bạn chưa đăng nhập')}</h1>
+        <p className="muted">{t('Vui lòng đăng nhập để xem dữ liệu của bạn.')}</p>
+        <p><Link href="/auth"><button>{t('Đăng nhập / Đăng ký')}</button></Link></p>
       </main>
     );
   }
@@ -218,13 +220,13 @@ export default function AppShell({ children }: { children: ReactNode }) {
         <div className="pull-refresh-indicator" role="status" aria-live="polite">
           <span className={pullDistance >= 72 ? 'pull-refresh-icon pull-refresh-ready' : 'pull-refresh-icon'}
             style={{ transform: `rotate(${Math.min(180, pullDistance * 2)}deg)` }} aria-hidden="true">↓</span>
-          <span>{pullDistance >= 72 ? 'Thả để làm mới' : 'Kéo xuống để làm mới'}</span>
+          <span>{pullDistance >= 72 ? t('Thả để làm mới') : t('Kéo xuống để làm mới')}</span>
         </div>
       ) : null}
       <header className="app-header">
         <div>
           <Link href="/dashboard" style={{ textDecoration: 'none', color: 'inherit' }}>
-            <strong style={{ fontSize: 20 }}>💰 Quản lý tài chính</strong>
+            <strong style={{ fontSize: 20 }}>💰 {t('Quản lý tài chính')}</strong>
           </Link>
           <div className="muted" style={{ fontSize: 13 }}>
             {state.user.name} • {state.user.email}
@@ -232,48 +234,47 @@ export default function AppShell({ children }: { children: ReactNode }) {
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <select
-            aria-label="Không gian làm việc"
+            aria-label={t('Không gian làm việc')}
             value={state.currentWorkspaceId ?? ''}
             onChange={(e) => switchWorkspace(e.target.value)}
             style={{ width: 'auto', minWidth: 180 }}
           >
             {state.workspaces.map((w) => (
-              <option key={w.id} value={w.id}>{w.name} — {WORKSPACE_MODE_LABELS[w.mode]}</option>
+              <option key={w.id} value={w.id}>{w.name} — {t(WORKSPACE_MODE_LABELS[w.mode])}</option>
             ))}
           </select>
-          <button className="btn-ghost" onClick={signOut}>Đăng xuất</button>
+          <button className="btn-ghost" onClick={signOut}>{t('Đăng xuất')}</button>
         </div>
       </header>
       {currentWorkspace ? (
         <p className="muted" style={{ margin: '4px 0 12px' }}>
-          Không gian: <b style={{ color: 'var(--text)' }}>{currentWorkspace.name}</b>
-          {' '}• Loại hình tính thuế: {BUSINESS_TYPE_LABELS[currentWorkspace.business_type ?? inferBusinessType(currentWorkspace.mode)]}
+          {t('Không gian')}: <b style={{ color: 'var(--text)' }}>{currentWorkspace.name}</b>
+          {' '}• {t('Loại hình tính thuế')}: {t(BUSINESS_TYPE_LABELS[currentWorkspace.business_type ?? inferBusinessType(currentWorkspace.mode)])}
         </p>
       ) : null}
       {syncError ? (
         <div className="sync-error" role="alert">
-          <span>{syncError}</span>
+          <span>{t(syncError)}</span>
           <button type="button" className="btn-secondary btn-small" onClick={retryLoad}>
-            Tải lại dữ liệu
+            {t('Tải lại dữ liệu')}
           </button>
-          <button type="button" className="btn-ghost btn-small" onClick={clearSyncError} aria-label="Đóng thông báo lỗi">
-            Đóng
+          <button type="button" className="btn-ghost btn-small" onClick={clearSyncError} aria-label={t('Đóng thông báo lỗi')}>
+            {t('Đóng')}
           </button>
         </div>
       ) : null}
       {children}
-      {/* Tab bar nổi ở dưới kiểu iOS 27 Liquid Glass — giống bản demo trên Muse. */}
-      <nav className="tabbar" aria-label="Điều hướng chính">
+      <nav className="tabbar" aria-label={t('Điều hướng chính')}>
         {NAV.slice(0, 2).map((n) => (
           <Link key={n.href} href={n.href} className={pathname === n.href ? 'tab-active' : ''}>
             <span className="tab-icon" aria-hidden="true">{n.icon}</span>
-            <span className="tab-label">{n.label}</span>
+            <span className="tab-label">{t(n.label)}</span>
           </Link>
         ))}
         <button
           type="button"
           className="tabbar-add"
-          aria-label="Thêm giao dịch"
+          aria-label={t('Thêm giao dịch')}
           onClick={() => {
             if (pathname === '/dashboard') {
               window.dispatchEvent(new Event('qltc:add-transaction'));
@@ -285,7 +286,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
         {NAV.slice(2).map((n) => (
           <Link key={n.href} href={n.href} className={pathname === n.href ? 'tab-active' : ''}>
             <span className="tab-icon" aria-hidden="true">{n.icon}</span>
-            <span className="tab-label">{n.label}</span>
+            <span className="tab-label">{t(n.label)}</span>
           </Link>
         ))}
       </nav>

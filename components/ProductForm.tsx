@@ -4,6 +4,7 @@ import type { AppState, Product, ProductInput } from '@/lib/types';
 import { useAppData } from '@/lib/data';
 import { fileToBase64 } from '@/lib/receipt';
 import { Field } from './GlassCard';
+import { usePreferences } from '@/lib/preferences';
 
 interface VariantRow { id?: string; name: string; cost_price: string; sale_price: string; stock: string; imeis: string; }
 
@@ -13,6 +14,7 @@ export default function ProductForm({ state, editing, onDone }: {
   onDone: () => void;
 }) {
   const { saveProduct } = useAppData();
+  const { t } = usePreferences();
   const wsId = state.currentWorkspaceId;
   const enabledFields = state.productFields.filter((f) => f.workspace_id === wsId && f.enabled);
   const cats = state.productCategories.filter((c) => c.workspace_id === wsId);
@@ -79,19 +81,19 @@ export default function ProductForm({ state, editing, onDone }: {
   return (
     <form onSubmit={submit} className="form-grid">
       <Field label="Tên sản phẩm">
-        <input placeholder="VD: Ốp lưng iPhone 15" value={name} onChange={(e) => setName(e.target.value)} required />
+        <input placeholder={t('VD: Ốp lưng iPhone 15')} value={name} onChange={(e) => setName(e.target.value)} required />
       </Field>
       <div className="form-row">
         <Field label="Mã SKU">
-          <input placeholder="VD: OP-IP15" value={sku} onChange={(e) => setSku(e.target.value)} />
+          <input placeholder={t('VD: OP-IP15')} value={sku} onChange={(e) => setSku(e.target.value)} />
         </Field>
         <Field label="Đơn vị">
-          <input placeholder="cái / hộp / kg" value={unit} onChange={(e) => setUnit(e.target.value)} />
+          <input placeholder={t('cái / hộp / kg')} value={unit} onChange={(e) => setUnit(e.target.value)} />
         </Field>
       </div>
       <Field label="Danh mục hàng">
         <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-          <option value="">— Không chọn —</option>
+          <option value="">— {t('Không chọn')} —</option>
           {cats.map((c) => (<option key={c.id} value={c.id}>{c.icon} {c.name}</option>))}
         </select>
       </Field>
@@ -104,7 +106,7 @@ export default function ProductForm({ state, editing, onDone }: {
         </Field>
       </div>
       <div className="form-row">
-        <Field label={variants.length ? `Tổng tồn kho (${variantStock})` : 'Tồn kho'}>
+        <Field label={variants.length ? `${t('Tổng tồn kho')} (${variantStock})` : 'Tồn kho'}>
           <input type="number" min={0} value={variants.length ? String(variantStock) : stock}
             disabled={variants.length > 0} onChange={(e) => setStock(e.target.value)} />
         </Field>
@@ -116,36 +118,36 @@ export default function ProductForm({ state, editing, onDone }: {
       <Field label="Ảnh sản phẩm (JPEG/PNG, tối đa 2MB)">
         <div className="flex-row">
           <label className="btn-secondary" style={{ cursor: 'pointer' }}>
-            📷 Chọn ảnh
+            {t('📷 Chọn ảnh')}
             <input type="file" accept="image/jpeg,image/png" style={{ display: 'none' }} onChange={async (e) => {
               const f = e.target.files?.[0]; if (!f) return;
               try { setImage(await fileToBase64(f)); }
               catch (err) { setErr(err instanceof Error ? err.message : 'Không đọc được ảnh.'); }
             }} />
           </label>
-          {image ? <button type="button" className="btn-ghost" onClick={() => setImage(null)}>Gỡ ảnh</button> : null}
+          {image ? <button type="button" className="btn-ghost" onClick={() => setImage(null)}>{t('Gỡ ảnh')}</button> : null}
         </div>
-        {image ? <img src={image} alt="Ảnh sản phẩm" decoding="async" style={{ maxWidth: '100%', maxHeight: 160, objectFit: 'contain', borderRadius: 12, marginTop: 8 }} /> : null}
+        {image ? <img src={image} alt={t('Ảnh sản phẩm')} decoding="async" style={{ maxWidth: '100%', maxHeight: 160, objectFit: 'contain', borderRadius: 12, marginTop: 8 }} /> : null}
       </Field>
 
       {enabledFields.length > 0 ? (
         <fieldset className="fieldset">
-          <legend>Thuộc tính tùy chỉnh</legend>
+          <legend>{t('Thuộc tính tùy chỉnh')}</legend>
           {enabledFields.map((f) => (
             <Field key={f.id} label={f.name + (f.required ? ' *' : '')}>
               {f.field_type === 'select' && f.options ? (
                 <select value={custom[f.name] ?? ''} onChange={(e) => setCustom((c) => ({ ...c, [f.name]: e.target.value }))}>
-                  <option value="">— Chọn —</option>
+                  <option value="">— {t('Chọn')} —</option>
                   {f.options.map((o) => (<option key={o} value={o}>{o}</option>))}
                 </select>
               ) : f.field_type === 'boolean' ? (
                 <select value={custom[f.name] ?? 'Không'} onChange={(e) => setCustom((c) => ({ ...c, [f.name]: e.target.value }))}>
-                  <option>Có</option><option>Không</option>
+                  <option>{t('Có')}</option><option>{t('Không')}</option>
                 </select>
               ) : (
                 <input
                   type={f.field_type === 'number' ? 'number' : f.field_type === 'date' ? 'date' : 'text'}
-                  placeholder={f.name}
+                  placeholder={t(f.name)}
                   value={custom[f.name] ?? ''}
                   onChange={(e) => setCustom((c) => ({ ...c, [f.name]: e.target.value }))}
                 />
@@ -156,16 +158,16 @@ export default function ProductForm({ state, editing, onDone }: {
       ) : null}
 
       <fieldset className="fieldset">
-        <legend>Biến thể (màu / size / dung lượng) — mỗi biến thể có giá &amp; tồn riêng</legend>
+        <legend>{t('Biến thể (màu / size / dung lượng) — mỗi biến thể có giá & tồn riêng')}</legend>
         {variants.map((v, i) => (
           <div key={v.id ?? i} className="variant-card">
             <div className="variant-card-header">
-              <strong>Biến thể {i + 1}</strong>
-              <button type="button" className="btn-ghost btn-small" onClick={() => setVariants((prev) => prev.filter((_, idx) => idx !== i))}>Xóa</button>
+              <strong>{t('Biến thể')} {i + 1}</strong>
+              <button type="button" className="btn-ghost btn-small" onClick={() => setVariants((prev) => prev.filter((_, idx) => idx !== i))}>{t('Xóa')}</button>
             </div>
             <div className="variant-fields">
               <Field label="Tên / thuộc tính">
-                <input placeholder="VD: Đen / 128 GB / Size M" value={v.name} onChange={(e) => setVariant(i, { name: e.target.value })} />
+                <input placeholder={t('VD: Đen / 128 GB / Size M')} value={v.name} onChange={(e) => setVariant(i, { name: e.target.value })} />
               </Field>
               <Field label="Giá nhập (đ)">
                 <input type="number" min={0} value={v.cost_price} onChange={(e) => setVariant(i, { cost_price: e.target.value })} />
@@ -177,17 +179,17 @@ export default function ProductForm({ state, editing, onDone }: {
                 <input type="number" min={0} value={v.stock} onChange={(e) => setVariant(i, { stock: e.target.value })} />
               </Field>
               <Field label="IMEI / Serial (phân cách bằng dấu phẩy)">
-                <input placeholder="VD: 356789123456703, 356789123456704" value={v.imeis} onChange={(e) => setVariant(i, { imeis: e.target.value })} />
+                <input placeholder={t('VD: 356789123456703, 356789123456704')} value={v.imeis} onChange={(e) => setVariant(i, { imeis: e.target.value })} />
               </Field>
             </div>
           </div>
         ))}
         <button type="button" className="btn-secondary" onClick={() => setVariants((prev) => [...prev, { name: '', cost_price: cost, sale_price: sale, stock: '0', imeis: '' }])}>
-          + Thêm biến thể
+          {t('+ Thêm biến thể')}
         </button>
       </fieldset>
-      {err ? <p className="error">{err}</p> : null}
-      <button type="submit" disabled={saving}>{saving ? 'Đang lưu…' : editing ? 'Lưu thay đổi' : 'Thêm sản phẩm'}</button>
+      {err ? <p className="error">{t(err)}</p> : null}
+      <button type="submit" disabled={saving}>{saving ? t('Đang lưu…') : editing ? t('Lưu thay đổi') : t('Thêm sản phẩm')}</button>
     </form>
   );
 }

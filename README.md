@@ -1,8 +1,10 @@
 # Quản lý tài chính — Source code đầy đủ (v2.1)
 
-Web + APK + iOS • Cá nhân / Hộ kinh doanh–Gia đình / Team–DN nhỏ • Chế độ kế toán tách biệt phương pháp ước tính thuế • Kho hàng tính lãi • iOS 27 Liquid Glass (dark mode)
+Web + APK + iOS • Cá nhân / Hộ kinh doanh–Gia đình / Team–DN nhỏ • Chế độ kế toán tách biệt phương pháp ước tính thuế • Kho hàng tính lãi • giao diện sáng/tối • tiếng Việt/English
 
 Bản v2 viết lại đầy đủ từng trang, không còn stub: Dashboard, Kho hàng, Thuế, Báo cáo (xuất CSV/Excel thật), Cài đặt, Auth. Kiểm tra bằng `npm run typecheck` (tsc --noEmit) phải ra 0 lỗi.
+
+Giao diện mặc định là sáng. Trong **Cài đặt → Cài đặt giao diện**, có thể đổi sáng/tối và tiếng Việt/English; lựa chọn được lưu riêng trên thiết bị hiện tại và áp dụng cho toàn bộ giao diện ứng dụng.
 
 ## 1. Chạy local (10 phút)
 ```bash
@@ -74,14 +76,16 @@ app/
   kho/page.tsx        Kho hàng: tìm/lọc, thêm/sửa/xóa sản phẩm, biến thể + IMEI, nhập kho, bán hàng tính lãi
   thue/page.tsx       Ước tính thuế theo loại hình; theo dõi sổ nộp thuế và mẫu sổ HKD TT88 S1–S7-HKD hiện có
   bao-cao/page.tsx    Báo cáo theo tháng: lãi theo sản phẩm, thu/chi theo danh mục, theo tháng, xuất CSV + Excel thật
-  cai-dat/page.tsx    Không gian Thêm/Sửa/Xóa, cài đặt thuế, danh mục, ngân sách, tài khoản, PIN, xóa dữ liệu mẫu
+  cai-dat/page.tsx    Không gian Thêm/Sửa/Xóa, giao diện/ngôn ngữ, cài đặt thuế, danh mục, ngân sách, tài khoản, PIN
 components/
+  SiteFooter.tsx      Footer tác giả theo ngôn ngữ ứng dụng
   GlassCard.tsx       GlassCard, StatCard, Modal, Field, EmptyState
   AppShell.tsx        Header + chuyển workspace + menu + khóa PIN
   TransactionForm.tsx Form Thu/Chi/Chuyển ví, bán hàng từ kho (chọn biến thể + IMEI, xem lãi live)
   WalletForm.tsx      Form Thêm/Sửa ví
   ProductForm.tsx     Form Thêm/Sửa sản phẩm: biến thể, trường tùy chỉnh (Màu sắc/IMEI/Serial/Bảo hành…)
 lib/
+  preferences.tsx     Theme sáng/tối, tiếng Việt/English và bản dịch giao diện
   types.ts            16 kiểu dữ liệu khớp schema.sql
   utils.ts            Hàm tính VAT, TNCN, TNDN tách theo loại hình; downloadCSV, downloadXLSX
   tax-config.ts       Cấu hình ngưỡng, thuế suất, phương pháp và căn cứ tham chiếu hiệu lực 2026

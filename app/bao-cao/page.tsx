@@ -4,10 +4,11 @@ import AppShell from '@/components/AppShell';
 import GlassCard, { StatCard } from '@/components/GlassCard';
 import { useAppData } from '@/lib/data';
 import {
-  downloadCSV, downloadXLSX, estimateWorkspaceTax, fmtDate, fmtVND, groupByMonth, monthISO,
+  downloadCSV, downloadXLSX, estimateWorkspaceTax, fmtVND, groupByMonth, monthISO,
 } from '@/lib/utils';
 import { BUSINESS_TYPE_LABELS, TAX_CALCULATION_METHOD_LABELS } from '@/lib/types';
 import { defaultTaxMethod, inferBusinessType, TAX_RULES_2026 } from '@/lib/tax-config';
+import { usePreferences } from '@/lib/preferences';
 
 type ChartPeriod = 'week' | 'month' | 'year-month' | 'year-day';
 type ChartMetricKey = 'income' | 'expense' | 'salesProfit' | 'net' | 'transfer';
@@ -38,13 +39,19 @@ const CHART_METRICS: Array<{
 const isoDate = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
-function compactVND(value: number): string {
+function compactVND(value: number, locale: string): string {
   const amount = Math.abs(value);
   const sign = value < 0 ? '-' : '';
-  if (amount >= 1_000_000_000) return `${sign}${(amount / 1_000_000_000).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} tỷ`;
-  if (amount >= 1_000_000) return `${sign}${(amount / 1_000_000).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} tr`;
-  if (amount >= 1_000) return `${sign}${(amount / 1_000).toLocaleString('vi-VN', { maximumFractionDigits: 1 })}k`;
-  return `${sign}${Math.round(amount).toLocaleString('vi-VN')} đ`;
+  const currency = locale === 'en-US' ? 'VND' : 'đ';
+  if (amount >= 1_000_000_000) return `${sign}${(amount / 1_000_000_000).toLocaleString(locale, { maximumFractionDigits: 1 })} ${locale === 'en-US' ? 'B' : 'tỷ'}`;
+  if (amount >= 1_000_000) return `${sign}${(amount / 1_000_000).toLocaleString(locale, { maximumFractionDigits: 1 })} ${locale === 'en-US' ? 'M' : 'tr'}`;
+  if (amount >= 1_000) return `${sign}${(amount / 1_000).toLocaleString(locale, { maximumFractionDigits: 1 })}k`;
+  return `${sign}${Math.round(amount).toLocaleString(locale)} ${currency}`;
+}
+
+function formatReportDate(iso: string, locale: string): string {
+  const date = new Date(`${iso.slice(0, 10)}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? iso : date.toLocaleDateString(locale);
 }
 
 function ReportLineChart({
@@ -57,6 +64,8 @@ function ReportLineChart({
   metric: ChartMetricKey;
   total: number;
 }) {
+  const { t, language } = usePreferences();
+  const locale = language === 'en' ? 'en-US' : 'vi-VN';
   const width = 640;
   const height = 236;
   const left = 64;
@@ -82,8 +91,8 @@ function ReportLineChart({
     <article className="report-chart-card" style={{ borderColor: `${color}55` }}>
       <header className="report-chart-header">
         <div>
-          <h3>{title}</h3>
-          <p>{description}</p>
+          <h3>{t(title)}</h3>
+          <p>{t(description)}</p>
         </div>
         <strong style={{ color }}>{fmtVND(total)}</strong>
       </header>
@@ -95,7 +104,7 @@ function ReportLineChart({
             return (
               <g key={step}>
                 <line x1={left} x2={right} y1={lineY} y2={lineY} stroke="rgba(255,255,255,.11)" strokeDasharray="3 5" />
-                <text x={left - 8} y={lineY + 4} textAnchor="end" fill="#9aa3b2" fontSize="10">{compactVND(value)}</text>
+                <text x={left - 8} y={lineY + 4} textAnchor="end" fill="#9aa3b2" fontSize="10">{compactVND(value, locale)}</text>
               </g>
             );
           })}
@@ -121,6 +130,8 @@ function ReportLineChart({
 
 export default function BaoCao() {
   const data = useAppData();
+  const { t, language } = usePreferences();
+  const locale = language === 'en' ? 'en-US' : 'vi-VN';
   const { state, currentWorkspace } = data;
   const [month, setMonth] = useState(monthISO());
   const [typeFilter, setTypeFilter] = useState<'all' | 'income' | 'expense'>('all');
@@ -142,8 +153,8 @@ export default function BaoCao() {
         date.setDate(start.getDate() + day);
         points.push({
           key: isoDate(date),
-          label: fmtDate(isoDate(date)),
-          axisLabel: day === 6 ? 'CN' : `T${day + 2}`,
+          label: formatReportDate(isoDate(date), locale),
+          axisLabel: new Intl.DateTimeFormat(locale, { weekday: 'short' }).format(date),
           income: 0, expense: 0, salesProfit: 0, net: 0, transfer: 0,
         });
       }
@@ -154,7 +165,7 @@ export default function BaoCao() {
         const date = new Date(start.getFullYear(), start.getMonth(), day);
         points.push({
           key: isoDate(date),
-          label: fmtDate(isoDate(date)),
+          label: formatReportDate(isoDate(date), locale),
           axisLabel: day === 1 || (day - 1) % 7 === 0 ? String(day) : '',
           income: 0, expense: 0, salesProfit: 0, net: 0, transfer: 0,
         });
@@ -165,7 +176,7 @@ export default function BaoCao() {
         for (let monthIndex = 0; monthIndex < 12; monthIndex += 1) {
           const key = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
           points.push({
-            key, label: `${String(monthIndex + 1).padStart(2, '0')}/${year}`, axisLabel: `T${monthIndex + 1}`,
+            key, label: new Intl.DateTimeFormat(locale, { month: 'short', year: 'numeric' }).format(new Date(year, monthIndex, 1)), axisLabel: new Intl.DateTimeFormat(locale, { month: 'short' }).format(new Date(year, monthIndex, 1)),
             income: 0, expense: 0, salesProfit: 0, net: 0, transfer: 0,
           });
         }
@@ -176,8 +187,8 @@ export default function BaoCao() {
           const iso = isoDate(date);
           points.push({
             key: iso,
-            label: fmtDate(iso),
-            axisLabel: date.getDate() === 1 ? `T${date.getMonth() + 1}` : '',
+            label: formatReportDate(iso, locale),
+            axisLabel: date.getDate() === 1 ? new Intl.DateTimeFormat(locale, { month: 'short' }).format(date) : '',
             income: 0, expense: 0, salesProfit: 0, net: 0, transfer: 0,
           });
         }
@@ -201,7 +212,7 @@ export default function BaoCao() {
       }
     }
     return points;
-  }, [allTxs, chartOffset, chartPeriod]);
+  }, [allTxs, chartOffset, chartPeriod, locale]);
 
   const chartPeriodLabel = useMemo(() => {
     if (chartPoints.length === 0) return '';
@@ -268,7 +279,7 @@ export default function BaoCao() {
     vatRate: currentWorkspace?.vat_rate ?? TAX_RULES_2026.enterprise.defaultVatRate,
     monthlyDeduction: currentWorkspace?.tncn_deduction ?? TAX_RULES_2026.personalIncome.monthlyDeduction,
   });
-  const fmtTaxAmount = (value: number | null) => value === null ? 'Chưa đủ dữ liệu' : fmtVND(value);
+  const fmtTaxAmount = (value: number | null) => value === null ? t('Chưa đủ dữ liệu') : fmtVND(value);
 
   const byProduct = useMemo(() => {
     const map = new Map<string, { name: string; qty: number; revenue: number; cost: number; profit: number }>();
@@ -358,35 +369,35 @@ export default function BaoCao() {
     <AppShell>
       <GlassCard title="Báo cáo & Xuất file" action={
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <select aria-label="Tháng báo cáo" value={month} onChange={(e) => setMonth(e.target.value)} style={{ width: 'auto' }}>
+          <select aria-label={t('Tháng báo cáo')} value={month} onChange={(e) => setMonth(e.target.value)} style={{ width: 'auto' }}>
             {months.length === 0 ? <option value={month}>{month}</option> : null}
             {months.map((m) => (<option key={m} value={m}>{m}</option>))}
           </select>
-          <select aria-label="Lọc loại" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as typeof typeFilter)} style={{ width: 'auto' }}>
-            <option value="all">Tất cả</option>
-            <option value="income">Chỉ thu</option>
-            <option value="expense">Chỉ chi</option>
+          <select aria-label={t('Lọc loại')} value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as typeof typeFilter)} style={{ width: 'auto' }}>
+            <option value="all">{t('Tất cả')}</option>
+            <option value="income">{t('Chỉ thu')}</option>
+            <option value="expense">{t('Chỉ chi')}</option>
           </select>
-          <button className="btn-ghost btn-small" onClick={exportCSV}>Xuất CSV</button>
-          <button className="btn-small" onClick={exportXLSX}>Xuất Excel (.xlsx)</button>
+          <button className="btn-ghost btn-small" onClick={exportCSV}>{t('Xuất CSV')}</button>
+          <button className="btn-small" onClick={exportXLSX}>{t('Xuất Excel (.xlsx)')}</button>
         </div>
       }>
         <div className="flex-row">
-          <StatCard label={`Tổng thu tháng ${month}`} value={fmtVND(income)} sub={`${txs.filter((t) => t.type === 'income').length} giao dịch thu`} />
-          <StatCard label={`Tổng chi tháng ${month}`} value={fmtVND(expense)} sub={`${txs.filter((t) => t.type === 'expense').length} giao dịch chi`} />
+          <StatCard label={`${t('Tổng thu tháng')} ${month}`} value={fmtVND(income)} sub={`${txs.filter((t) => t.type === 'income').length} ${t('giao dịch thu')}`} />
+          <StatCard label={`${t('Tổng chi tháng')} ${month}`} value={fmtVND(expense)} sub={`${txs.filter((t) => t.type === 'expense').length} ${t('giao dịch chi')}`} />
           <StatCard label="Lãi bán hàng" value={fmtVND(profit)} sub="Doanh thu − Giá vốn" />
-          <StatCard label={`Thuế ước tính · ${TAX_CALCULATION_METHOD_LABELS[tax.method]}`} value={fmtTaxAmount(tax.total)} sub={`${tax.incomeTaxLabel}: ${fmtTaxAmount(tax.incomeTax)}. Lợi nhuận tính thuế cần nhập tại mục Thuế.`} />
+          <StatCard label={`${t('Thuế ước tính')} · ${t(TAX_CALCULATION_METHOD_LABELS[tax.method])}`} value={fmtTaxAmount(tax.total)} sub={`${t(tax.incomeTaxLabel)}: ${fmtTaxAmount(tax.incomeTax)}. ${t('Lợi nhuận tính thuế cần nhập tại mục Thuế.')}`} />
         </div>
       </GlassCard>
 
-      <GlassCard title={`Biểu đồ thu chi & dòng tiền — ${chartPeriodLabel}`} action={
+      <GlassCard title={`${t('Biểu đồ thu chi & dòng tiền')} — ${chartPeriodLabel}`} action={
         <div className="report-chart-controls">
-          <div className="report-period-buttons" role="group" aria-label="Khoảng thời gian biểu đồ">
+          <div className="report-period-buttons" role="group" aria-label={t('Khoảng thời gian biểu đồ')}>
             {([
-              ['week', 'Tuần'],
-              ['month', 'Tháng'],
-              ['year-month', 'Năm · tháng'],
-              ['year-day', 'Năm · ngày'],
+              ['week', t('Tuần')],
+              ['month', t('Tháng')],
+              ['year-month', t('Năm · tháng')],
+              ['year-day', t('Năm · ngày')],
             ] as Array<[ChartPeriod, string]>).map(([period, label]) => (
               <button
                 key={period}
@@ -400,9 +411,9 @@ export default function BaoCao() {
             ))}
           </div>
           <div className="report-period-nav">
-            <button type="button" className="btn-ghost btn-small" aria-label="Khoảng thời gian trước" onClick={() => setChartOffset((offset) => offset - 1)}>‹</button>
+            <button type="button" className="btn-ghost btn-small" aria-label={t('Khoảng thời gian trước')} onClick={() => setChartOffset((offset) => offset - 1)}>‹</button>
             <span>{chartPeriodLabel}</span>
-            <button type="button" className="btn-ghost btn-small" aria-label="Khoảng thời gian sau" disabled={chartOffset >= 0} onClick={() => setChartOffset((offset) => Math.min(0, offset + 1))}>›</button>
+            <button type="button" className="btn-ghost btn-small" aria-label={t('Khoảng thời gian sau')} disabled={chartOffset >= 0} onClick={() => setChartOffset((offset) => Math.min(0, offset + 1))}>›</button>
           </div>
         </div>
       }>
@@ -420,12 +431,12 @@ export default function BaoCao() {
           ))}
         </div>
         <div className="report-transfer-routes">
-          <strong>Luồng chuyển ví trong khoảng thời gian này</strong>
-          {transferRoutes.length === 0 ? <p className="muted">Chưa có giao dịch chuyển ví.</p> : (
+          <strong>{t('Luồng chuyển ví trong khoảng thời gian này')}</strong>
+          {transferRoutes.length === 0 ? <p className="muted">{t('Chưa có giao dịch chuyển ví.')}</p> : (
             <ul>
               {transferRoutes.map((route) => (
                 <li key={route.id}>
-                  <span>{route.label}<small>{route.count} giao dịch</small></span>
+                  <span>{route.label}<small>{route.count} {t('giao dịch')}</small></span>
                   <b>{fmtVND(route.amount)}</b>
                 </li>
               ))}
@@ -434,11 +445,11 @@ export default function BaoCao() {
         </div>
       </GlassCard>
 
-      <GlassCard title={`Lãi theo sản phẩm — tháng ${month}`}>
-        {byProduct.length === 0 ? <p className="muted">Tháng này chưa có đơn bán hàng nào từ kho.</p> : (
+      <GlassCard title={`${t('Lãi theo sản phẩm')} — ${t('tháng')} ${month}`}>
+        {byProduct.length === 0 ? <p className="muted">{t('Tháng này chưa có đơn bán hàng nào từ kho.')}</p> : (
           <div className="table-wrap">
             <table className="data">
-              <thead><tr><th>Sản phẩm</th><th>SL bán</th><th>Doanh thu</th><th>Giá vốn</th><th>Lãi</th></tr></thead>
+              <thead><tr><th>{t('Sản phẩm')}</th><th>{t('SL bán')}</th><th>{t('Doanh thu')}</th><th>{t('Giá vốn')}</th><th>{t('Lãi')}</th></tr></thead>
               <tbody>
                 {byProduct.map((r) => (
                   <tr key={r.name}><td>{r.name}</td><td>{r.qty}</td><td>{fmtVND(r.revenue)}</td><td>{fmtVND(r.cost)}</td><td><b style={{ color: '#34c759' }}>{fmtVND(r.profit)}</b></td></tr>
@@ -449,11 +460,11 @@ export default function BaoCao() {
         )}
       </GlassCard>
 
-      <GlassCard title={`Thu / chi theo danh mục — tháng ${month}`}>
-        {byCategory.length === 0 ? <p className="muted">Chưa có dữ liệu.</p> : (
+      <GlassCard title={`${t('Thu / chi theo danh mục')} — ${t('tháng')} ${month}`}>
+        {byCategory.length === 0 ? <p className="muted">{t('Chưa có dữ liệu.')}</p> : (
           <div className="table-wrap">
             <table className="data">
-              <thead><tr><th>Danh mục</th><th>Thu</th><th>Chi</th><th>Chênh lệch</th></tr></thead>
+              <thead><tr><th>{t('Danh mục')}</th><th>{t('Thu')}</th><th>{t('Chi')}</th><th>{t('Chênh lệch')}</th></tr></thead>
               <tbody>
                 {byCategory.map((r) => (
                   <tr key={r.name}><td>{r.name}</td><td>{fmtVND(r.income)}</td><td>{fmtVND(r.expense)}</td><td>{fmtVND(r.income - r.expense)}</td></tr>
@@ -465,10 +476,10 @@ export default function BaoCao() {
       </GlassCard>
 
       <GlassCard title="Thu / chi theo tháng">
-        {monthly.length === 0 ? <p className="muted">Chưa có dữ liệu.</p> : (
+        {monthly.length === 0 ? <p className="muted">{t('Chưa có dữ liệu.')}</p> : (
           <div className="table-wrap">
             <table className="data">
-              <thead><tr><th>Tháng</th><th>Thu</th><th>Chi</th><th>Lãi bán hàng</th><th>Số GD</th></tr></thead>
+              <thead><tr><th>{t('Tháng')}</th><th>{t('Thu')}</th><th>{t('Chi')}</th><th>{t('Lãi bán hàng')}</th><th>{t('Số GD')}</th></tr></thead>
               <tbody>
                 {monthly.map((m) => (
                   <tr key={m.month}><td>{m.month}</td><td>{fmtVND(m.income)}</td><td>{fmtVND(m.expense)}</td><td>{fmtVND(m.profit)}</td><td>{m.count}</td></tr>
@@ -479,21 +490,21 @@ export default function BaoCao() {
         )}
       </GlassCard>
 
-      <GlassCard title={`Chi tiết giao dịch — tháng ${month} (${txs.length} giao dịch)`}>
-        {txs.length === 0 ? <p className="muted">Tháng này chưa có giao dịch nào.</p> : (
+      <GlassCard title={`${t('Chi tiết giao dịch')} — ${t('tháng')} ${month} (${txs.length} ${t('giao dịch')})`}>
+        {txs.length === 0 ? <p className="muted">{t('Tháng này chưa có giao dịch nào.')}</p> : (
           <div className="table-wrap">
             <table className="data">
-              <thead><tr><th>Ngày</th><th>Loại</th><th>Danh mục</th><th>Sản phẩm</th><th>Số tiền</th><th>Lãi</th><th>Ví</th></tr></thead>
+              <thead><tr><th>{t('Ngày')}</th><th>{t('Loại')}</th><th>{t('Danh mục')}</th><th>{t('Sản phẩm')}</th><th>{t('Số tiền')}</th><th>{t('Lãi')}</th><th>{t('Ví')}</th></tr></thead>
               <tbody>
-                {txs.map((t) => (
-                  <tr key={t.id}>
-                    <td>{fmtDate(t.date)}</td>
-                    <td>{t.type === 'income' ? 'Thu' : t.type === 'expense' ? 'Chi' : 'Chuyển ví'}</td>
-                    <td>{catName(t.category_id)}</td>
-                    <td>{productName(t)}{t.quantity && t.quantity > 1 ? ` ×${t.quantity}` : ''}</td>
-                    <td>{fmtVND(t.amount)}</td>
-                    <td>{t.profit ? fmtVND(t.profit) : '—'}</td>
-                    <td>{walletName(t.wallet_id)}</td>
+                {txs.map((tx) => (
+                  <tr key={tx.id}>
+                    <td>{formatReportDate(tx.date, locale)}</td>
+                    <td>{t(tx.type === 'income' ? 'Thu' : tx.type === 'expense' ? 'Chi' : 'Chuyển ví')}</td>
+                    <td>{catName(tx.category_id)}</td>
+                    <td>{productName(tx)}{tx.quantity && tx.quantity > 1 ? ` ×${tx.quantity}` : ''}</td>
+                    <td>{fmtVND(tx.amount)}</td>
+                    <td>{tx.profit ? fmtVND(tx.profit) : '—'}</td>
+                    <td>{walletName(tx.wallet_id)}</td>
                   </tr>
                 ))}
               </tbody>

@@ -4,6 +4,7 @@ import type { Wallet, WalletType } from '@/lib/types';
 import { WALLET_TYPE_LABELS } from '@/lib/types';
 import { useAppData } from '@/lib/data';
 import { Field } from './GlassCard';
+import { usePreferences } from '@/lib/preferences';
 
 const TYPES = Object.keys(WALLET_TYPE_LABELS) as WalletType[];
 
@@ -11,6 +12,7 @@ export default function WalletForm({ editing, onDone }: {
   editing?: Wallet | null; onDone: () => void;
 }) {
   const { saveWallet } = useAppData();
+  const { t } = usePreferences();
   const [name, setName] = useState(editing?.name ?? '');
   const [type, setType] = useState<WalletType>(editing?.type ?? 'cash');
   const [balance, setBalance] = useState(String(editing?.balance ?? 0));
@@ -34,18 +36,18 @@ export default function WalletForm({ editing, onDone }: {
   return (
     <form onSubmit={submit} className="form-grid">
       <Field label="Tên ví">
-        <input placeholder="VD: Vietcombank, Tiền mặt, MoMo" value={name} onChange={(e) => setName(e.target.value)} required />
+        <input placeholder={t('VD: Vietcombank, Tiền mặt, MoMo')} value={name} onChange={(e) => setName(e.target.value)} required />
       </Field>
       <Field label="Loại ví">
         <select value={type} onChange={(e) => setType(e.target.value as WalletType)}>
-          {TYPES.map((t) => (<option key={t} value={t}>{WALLET_TYPE_LABELS[t]}</option>))}
+          {TYPES.map((walletType) => (<option key={walletType} value={walletType}>{t(WALLET_TYPE_LABELS[walletType])}</option>))}
         </select>
       </Field>
       <Field label="Số dư ban đầu (đ)">
         <input type="number" value={balance} onChange={(e) => setBalance(e.target.value)} />
       </Field>
-      {err ? <p className="error">{err}</p> : null}
-      <button type="submit">{editing ? 'Lưu thay đổi' : 'Thêm ví'}</button>
+      {err ? <p className="error">{t(err)}</p> : null}
+      <button type="submit">{editing ? t('Lưu thay đổi') : t('Thêm ví')}</button>
     </form>
   );
 }

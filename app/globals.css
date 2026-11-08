@@ -1,23 +1,28 @@
 :root {
+  --bg: #f3f6fb; --card: rgba(255, 255, 255, 0.88); --text: #172033;
+  --muted: #647084; --accent: #0876e8; --green: #168442; --red: #d82f35;
+  --orange: #ff9500; --radius: 24px;
+}
+[data-theme="dark"] {
   --bg: #0b0e1a; --card: rgba(255, 255, 255, 0.08); --text: #f2f4f8;
   --muted: #9aa3b2; --accent: #0a84ff; --green: #34c759; --red: #ff3b30;
-  --orange: #ff9500; --radius: 24px;
 }
 * { box-sizing: border-box; }
 html {
   min-height: 100%;
-  background: #070a14;
+  background: var(--bg);
   overscroll-behavior-y: none;
 }
 .page-container { max-width: 1080px; margin: 0 auto; padding: 20px 16px 64px; }
 body {
   margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
-  /* Nền tối iOS 27 Liquid Glass cho các trang trong — giống bản demo.
-     Trang chủ (/) tự phủ nền xanh blur riêng qua .home, không dùng nền này. */
-  background: linear-gradient(180deg, #070a14 0%, #0b0e1a 45%, #0d1526 100%);
+  background: linear-gradient(180deg, #f8faff 0%, #f1f5fb 48%, #eaf0f8 100%);
   background-attachment: fixed;
   color: var(--text); min-height: 100vh; min-height: 100dvh;
   overscroll-behavior-y: none;
+}
+[data-theme="dark"] body {
+  background: linear-gradient(180deg, #070a14 0%, #0b0e1a 45%, #0d1526 100%);
 }
 .site-footer {
   display: flex; justify-content: center;
@@ -78,11 +83,10 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
   background: rgba(49, 88, 153, .2); box-shadow: 0 0 0 3px rgba(10, 132, 255, .16);
 }
 input[type="checkbox"] { width: auto; }
-select { color-scheme: dark; }
+select { color-scheme: light; }
 select option { color: #101828; background: #fff; }
-@media (prefers-color-scheme: dark) {
-  select option { color: #f2f4f8; background: #232839; }
-}
+[data-theme="dark"] select { color-scheme: dark; }
+[data-theme="dark"] select option { color: #f2f4f8; background: #232839; }
 .form-grid { display: grid; gap: 12px; }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 600px) { .form-row { grid-template-columns: 1fr; } }
@@ -246,6 +250,121 @@ select option { color: #101828; background: #fff; }
 }
 @media (prefers-reduced-motion: reduce) {
   .page-skeleton-block::after { animation: none; transform: translateX(0); }
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+:root[data-theme="light"] select { color-scheme: light; }
+:root[data-theme="light"] .glass {
+  border-color: rgba(31, 51, 82, .11);
+  box-shadow: 0 8px 26px rgba(31, 51, 82, .08);
+}
+:root[data-theme="light"] .btn-secondary,
+:root[data-theme="light"] .btn-ghost {
+  border: 1px solid rgba(31, 51, 82, .12);
+  background: rgba(31, 51, 82, .055);
+  color: var(--text);
+}
+:root[data-theme="light"] input,
+:root[data-theme="light"] select,
+:root[data-theme="light"] textarea {
+  border-color: rgba(31, 51, 82, .17);
+  background: #fff;
+  color: var(--text);
+}
+:root[data-theme="light"] input:focus-visible,
+:root[data-theme="light"] select:focus-visible,
+:root[data-theme="light"] textarea:focus-visible {
+  background: #fff;
+}
+:root[data-theme="light"] .fieldset,
+:root[data-theme="light"] .variant-card,
+:root[data-theme="light"] .category-create-panel {
+  border-color: rgba(31, 51, 82, .12);
+  background: rgba(255, 255, 255, .76);
+}
+:root[data-theme="light"] .row-item {
+  border-color: rgba(var(--row-accent), .22);
+  background: linear-gradient(115deg, rgba(var(--row-accent), .09), rgba(255, 255, 255, .94) 70%);
+  box-shadow: 0 3px 12px rgba(31, 51, 82, .035);
+}
+:root[data-theme="light"] .tabbar {
+  border-color: rgba(31, 51, 82, .12);
+  background: rgba(255, 255, 255, .91);
+  box-shadow: 0 12px 36px rgba(31, 51, 82, .16);
+}
+:root[data-theme="light"] .tabbar a { color: #526078; }
+:root[data-theme="light"] .tabbar a.tab-active { color: #fff; }
+:root[data-theme="light"] .modal {
+  border-color: rgba(31, 51, 82, .13);
+  background: rgba(249, 251, 255, .98);
+  box-shadow: 0 18px 56px rgba(31, 51, 82, .2);
+}
+:root[data-theme="light"] .modal-backdrop { background: rgba(22, 35, 54, .38); }
+:root[data-theme="light"] .transaction-type-switch { background: rgba(31, 51, 82, .07); }
+:root[data-theme="light"] .transaction-type-switch button.transaction-type-active {
+  background: #fff;
+  color: var(--text);
+  box-shadow: 0 2px 8px rgba(31, 51, 82, .12);
+}
+:root[data-theme="light"] .badge {
+  border-color: rgba(31, 51, 82, .1);
+  background: rgba(31, 51, 82, .07);
+  color: #334155;
+}
+:root[data-theme="light"] .table-wrap,
+:root[data-theme="light"] table.data { border-color: rgba(31, 51, 82, .13); }
+:root[data-theme="light"] table.data th { background: #edf2f8; color: #344158; }
+:root[data-theme="light"] table.data td { border-color: rgba(31, 51, 82, .1); }
+:root[data-theme="light"] table.data tbody tr:nth-child(even) { background: rgba(31, 51, 82, .035); }
+:root[data-theme="light"] .profit-box {
+  border-color: rgba(22, 132, 66, .22);
+  background: rgba(22, 132, 66, .07);
+}
+:root[data-theme="light"] .balance-hero { box-shadow: 0 18px 44px rgba(49, 90, 233, .15); }
+:root[data-theme="light"] .balance-breakdown > div { background: rgba(255, 255, 255, .2); }
+:root[data-theme="light"] .author-link strong { color: #334155; }
+:root[data-theme="light"] .quick-action {
+  border-color: rgba(31, 51, 82, .12);
+  background: rgba(255, 255, 255, .84);
+  color: var(--text);
+  box-shadow: 0 6px 18px rgba(31, 51, 82, .08);
+}
+:root[data-theme="light"] .quick-action:hover { background: #fff; }
+:root[data-theme="light"] .page-skeleton-section,
+:root[data-theme="light"] .page-skeleton-row { border-color: rgba(31, 51, 82, .1); }
+:root[data-theme="light"] .sync-error { color: #9c2525; }
+:root[data-theme="light"] .pin-lock-screen,
+:root[data-theme="light"] .home { color: var(--text); }
+:root[data-theme="light"] .report-transfer-routes { border-color: rgba(31, 51, 82, .12); }
+:root[data-theme="light"] .home {
+  background: linear-gradient(135deg, #f8fbff 0%, #eaf3ff 48%, #e6f8fb 100%);
+}
+:root[data-theme="light"] .home .glass {
+  border-color: rgba(31, 51, 82, .12);
+  background: rgba(255, 255, 255, .86);
+  box-shadow: 0 12px 36px rgba(31, 51, 82, .12);
+}
+:root[data-theme="light"] .blob { opacity: .25; }
+:root[data-theme="light"] .tabbar {
+  border-color: rgba(31, 51, 82, .13);
+  background: rgba(255, 255, 255, .94);
+  box-shadow: 0 12px 32px rgba(31, 51, 82, .18);
+}
+:root[data-theme="light"] .report-chart-card {
+  background: linear-gradient(145deg, rgba(255,255,255,.92), rgba(241,245,251,.85));
+}
+:root[data-theme="light"] .report-chart-plot svg line { stroke: rgba(31, 51, 82, .16); }
+:root[data-theme="light"] .report-chart-plot svg text { fill: #526078; }
+:root[data-theme="light"] .report-transfer-routes li {
+  border-color: rgba(31, 51, 82, .1);
+  background: rgba(31, 51, 82, .025);
+}
+:root[data-theme="light"] .fieldset,
+:root[data-theme="light"] .variant-card,
+:root[data-theme="light"] .category-create-panel {
+  border-color: rgba(31, 51, 82, .12);
 }
 .balance-hero {
   margin: 18px 0 16px; padding: 22px 24px 20px; border-radius: 30px;

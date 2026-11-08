@@ -1,6 +1,7 @@
 'use client';
 import Link from 'next/link';
 import AuthForm from '@/components/AuthForm';
+import { usePreferences } from '@/lib/preferences';
 
 const FEATURES = [
   { icon: '💰', text: 'Ví, Thu–Chi–Chuyển ví, Danh mục, Ngân sách, Mục tiêu, Nợ, Nhắc nhở' },
@@ -11,6 +12,7 @@ const FEATURES = [
 ];
 
 export default function Home() {
+  const { t } = usePreferences();
   return (
     <div className="home">
       <div className="home-blobs" aria-hidden="true">
@@ -22,32 +24,30 @@ export default function Home() {
 
       <header className="home-hero">
         <div className="home-logo">💰</div>
-        <h1 className="home-title">Quản lý tài chính</h1>
-        <p className="home-tagline">
-          Cá nhân / Hộ kinh doanh – Gia đình / Team – DN nhỏ • TT88/2021 • Kho hàng tính lãi • iOS 27 Liquid Glass
-        </p>
+        <h1 className="home-title">{t('Quản lý tài chính')}</h1>
+        <p className="home-tagline">{t('Cá nhân / Hộ kinh doanh – Gia đình / Team – DN nhỏ • TT88/2021 • Kho hàng tính lãi • iOS 27 Liquid Glass')}</p>
       </header>
 
       <div className="home-grid">
         <div className="glass home-auth">
           <AuthForm />
           <p style={{ textAlign: 'center', marginTop: 16 }}>
-            <Link href="/dashboard">Vào Dashboard →</Link>
+            <Link href="/dashboard">{t('Vào Dashboard →')}</Link>
           </p>
         </div>
 
         <section className="glass home-features">
-          <h2>Tính năng chính</h2>
+          <h2>{t('Tính năng chính')}</h2>
           <ul className="feature-list">
             {FEATURES.map((f) => (
               <li key={f.text}>
                 <span className="feature-icon">{f.icon}</span>
-                <span>{f.text}</span>
+                <span>{t(f.text)}</span>
               </li>
             ))}
           </ul>
           <p className="muted" style={{ fontSize: 13, marginTop: 16 }}>
-            Phần thuế của ứng dụng ở mức<b style={{ color: 'var(--text)' }}>đảm bảo về hình thức tuân thủ</b>cho hộ kinh doanh nhỏ theo phương pháp trực tiếp: đúng khung TT88/2021, đủ bộ sổ, xuất được file. Tuy nhiên, để thực sự an tâm khi quyết toán, bạn nên kiểm tra lại tỷ lệ % áp cho đúng ngành nghề của mình và đối chiếu số liệu với thông báo thuế của Chi cục Thuế địa phương.
+            {t('Phần thuế của ứng dụng ở mức đảm bảo về hình thức tuân thủ cho hộ kinh doanh nhỏ theo phương pháp trực tiếp: đúng khung TT88/2021, đủ bộ sổ, xuất được file. Tuy nhiên, để thực sự an tâm khi quyết toán, bạn nên kiểm tra lại tỷ lệ % áp cho đúng ngành nghề của mình và đối chiếu số liệu với thông báo thuế của Chi cục Thuế địa phương.')}
           </p>
         </section>
       </div>

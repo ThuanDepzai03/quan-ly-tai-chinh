@@ -10,6 +10,7 @@ import {
 import { ACCOUNTING_REGIMES, BUSINESS_SECTOR_LABELS, BUSINESS_TYPE_LABELS, TAX_CALCULATION_METHOD_LABELS, TAX_CIRCULAR_LABELS } from '@/lib/types';
 import type { BusinessSector, BusinessType, TaxCircular, TaxKind } from '@/lib/types';
 import { defaultTaxMethod, inferBusinessType, taxMethodOptions, TAX_RULES_2026 } from '@/lib/tax-config';
+import { usePreferences } from '@/lib/preferences';
 
 const BOOKS = [
   { code: 'S1-HKD', name: 'Sổ chi tiết doanh thu bán hàng, cung cấp dịch vụ' },
@@ -23,6 +24,7 @@ const BOOKS = [
 
 export default function Thue() {
   const data = useAppData();
+  const { t } = usePreferences();
   const { state, currentWorkspace } = data;
   const [period, setPeriod] = useState<'month' | 'quarter' | 'year'>('quarter');
   const [manualRevenue, setManualRevenue] = useState('');
@@ -132,21 +134,21 @@ export default function Thue() {
   return (
     <AppShell>
       <div className="flex-row">
-        <StatCard label={`Doanh thu ${periodKey}`} value={fmtVND(revenue)} sub={manualRevenue ? 'Nhập tay' : 'Tính từ giao dịch đã ghi'} />
-        <StatCard label="Thuế ước tính theo loại hình" value={fmtTaxAmount(taxEstimate.total)} sub={`${taxEstimate.incomeTaxLabel}: ${fmtTaxAmount(taxEstimate.incomeTax)}`} />
+        <StatCard label={`${t('Doanh thu')} ${periodKey}`} value={fmtVND(revenue)} sub={manualRevenue ? t('Nhập tay') : t('Tính từ giao dịch đã ghi')} />
+        <StatCard label="Thuế ước tính theo loại hình" value={fmtTaxAmount(taxEstimate.total)} sub={`${t(taxEstimate.incomeTaxLabel)}: ${fmtTaxAmount(taxEstimate.incomeTax)}`} />
         <StatCard label={taxEstimate.incomeTaxLabel} value={fmtTaxAmount(taxEstimate.incomeTax)} sub={taxEstimate.incomeTaxFormula || taxEstimate.notes[0]} />
         <StatCard label="Thuế đã ghi: đã nộp / chưa nộp" value={`${fmtVND(paidTotal)} / ${fmtVND(dueTotal)}`} sub="Theo sổ nộp thuế bên dưới" />
       </div>
 
       <GlassCard title="Thống kê thuế" action={
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <select aria-label="Kỳ thống kê" value={period} onChange={(e) => setPeriod(e.target.value as typeof period)} style={{ width: 'auto' }}>
-            <option value="month">Tháng này</option>
-            <option value="quarter">Quý này</option>
-            <option value="year">Năm nay</option>
+          <select aria-label={t('Kỳ thống kê')} value={period} onChange={(e) => setPeriod(e.target.value as typeof period)} style={{ width: 'auto' }}>
+            <option value="month">{t('Tháng này')}</option>
+            <option value="quarter">{t('Quý này')}</option>
+            <option value="year">{t('Năm nay')}</option>
           </select>
-          <button className="btn-ghost btn-small" onClick={exportTaxCSV}>Xuất CSV</button>
-          <button className="btn-small" onClick={exportBooksXLSX}>Xuất 7 sổ Excel</button>
+          <button className="btn-ghost btn-small" onClick={exportTaxCSV}>{t('Xuất CSV')}</button>
+          <button className="btn-small" onClick={exportBooksXLSX}>{t('Xuất 7 sổ Excel')}</button>
         </div>
       }>
         <div className="form-row">
@@ -161,7 +163,7 @@ export default function Thue() {
               });
             }}>
               {(Object.keys(BUSINESS_TYPE_LABELS) as BusinessType[]).map((type) => (
-                <option key={type} value={type}>{BUSINESS_TYPE_LABELS[type]}</option>
+                <option key={type} value={type}>{t(BUSINESS_TYPE_LABELS[type])}</option>
               ))}
             </select>
           </Field>
@@ -169,7 +171,7 @@ export default function Thue() {
             <Field label="Nhóm hoạt động kinh doanh">
               <select value={businessSector} onChange={(e) => data.updateTaxSettings({ business_sector: e.target.value as BusinessSector })}>
                 {(Object.keys(BUSINESS_SECTOR_LABELS) as BusinessSector[]).map((sector) => (
-                  <option key={sector} value={sector}>{BUSINESS_SECTOR_LABELS[sector]}</option>
+                  <option key={sector} value={sector}>{t(BUSINESS_SECTOR_LABELS[sector])}</option>
                 ))}
               </select>
             </Field>
@@ -180,14 +182,14 @@ export default function Thue() {
               data.updateTaxSettings({ tax_circular: c });
             }}>
               {ACCOUNTING_REGIMES.map((c) => (
-                <option key={c} value={c}>{TAX_CIRCULAR_LABELS[c]}</option>
+                <option key={c} value={c}>{t(TAX_CIRCULAR_LABELS[c])}</option>
               ))}
             </select>
           </Field>
           <Field label="Phương pháp ước tính thuế thu nhập (tự xác định theo chủ thể/ngưỡng)">
             <select value={taxMethod} disabled>
               {taxMethods.map((method) => (
-                <option key={method} value={method}>{TAX_CALCULATION_METHOD_LABELS[method]}</option>
+                <option key={method} value={method}>{t(TAX_CALCULATION_METHOD_LABELS[method])}</option>
               ))}
             </select>
           </Field>
@@ -217,25 +219,25 @@ export default function Thue() {
         </div>
         <div className="table-wrap" style={{ marginTop: 12 }}>
           <table className="data">
-            <thead><tr><th>Khoản thuế</th><th>Cách tính</th><th>Số tiền</th></tr></thead>
+            <thead><tr><th>{t('Khoản thuế')}</th><th>{t('Cách tính')}</th><th>{t('Số tiền')}</th></tr></thead>
             <tbody>
               {taxEstimate.vat !== null ? <tr><td>VAT</td><td>{businessType === 'household_business'
                 ? `Doanh thu kỳ × ${(TAX_RULES_2026.householdBusiness.revenueRates[businessSector].vat * 100).toLocaleString('vi-VN')}% (${businessSector})`
                 : `Doanh thu kỳ × ${((ws?.vat_rate ?? TAX_RULES_2026.enterprise.defaultVatRate) * 100).toLocaleString('vi-VN')}% − VAT đầu vào`}</td><td>{fmtVND(taxEstimate.vat)}</td></tr> : null}
               {taxEstimate.tncn !== null ? <tr><td>TNCN</td><td>{taxEstimate.incomeTaxFormula}</td><td>{fmtVND(taxEstimate.tncn)}</td></tr> : null}
               {taxEstimate.tndn !== null ? <tr><td>TNDN</td><td>{taxEstimate.incomeTaxFormula}</td><td>{fmtVND(taxEstimate.tndn)}</td></tr> : null}
-              <tr><td>Thuế khác</td><td>Không tự ước tính; ghi nhận theo chứng từ</td><td>—</td></tr>
-              <tr><td><b>Tổng thuế ước tính</b></td><td>Chỉ hiện khi đã nhập đủ dữ liệu bắt buộc</td><td><b>{fmtTaxAmount(taxEstimate.total)}</b></td></tr>
+              <tr><td>{t('Thuế khác')}</td><td>{t('Không tự ước tính; ghi nhận theo chứng từ')}</td><td>—</td></tr>
+              <tr><td><b>{t('Tổng thuế ước tính')}</b></td><td>{t('Chỉ hiện khi đã nhập đủ dữ liệu bắt buộc')}</td><td><b>{fmtTaxAmount(taxEstimate.total)}</b></td></tr>
             </tbody>
           </table>
         </div>
         <p className="muted" style={{ fontSize: 13 }}>
-          {taxEstimate.notes.join(' ')} Lệ phí môn bài không còn nằm trong ước tính năm 2026; khoản môn bài đã ghi trước đây chỉ được giữ để tra cứu lịch sử. Đây là số tham khảo, cần đối chiếu quy định và hồ sơ thực tế.
+          {taxEstimate.notes.map((note) => t(note)).join(' ')} {t('Lệ phí môn bài không còn nằm trong ước tính năm 2026; khoản môn bài đã ghi trước đây chỉ được giữ để tra cứu lịch sử. Đây là số tham khảo, cần đối chiếu quy định và hồ sơ thực tế.')}
         </p>
       </GlassCard>
 
       <GlassCard title="Sổ nộp thuế" action={
-        <button className="btn-small" onClick={() => setShowForm(true)}>+ Ghi khoản thuế</button>
+        <button className="btn-small" onClick={() => setShowForm(true)}>+ {t('Ghi khoản thuế')}</button>
       }>
         {payments.length === 0 ? <EmptyState text="Chưa ghi khoản thuế nào — bấm “Ghi khoản thuế” để theo dõi hạn nộp." /> : (
           <div className="row-list">
@@ -243,15 +245,15 @@ export default function Thue() {
               <div key={p.id} className="row-item">
                 <div>
                   <b>{p.tax_type === 'mon_bai' ? 'Môn bài (lịch sử)' : p.tax_type} — {p.period}</b>
-                  <div className="sub">Hạn: {p.due_date ? fmtDate(p.due_date) : '—'}{p.note ? ` • ${p.note}` : ''}</div>
+                  <div className="sub">{t('Hạn')}: {p.due_date ? fmtDate(p.due_date) : '—'}{p.note ? ` • ${p.note}` : ''}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <b>{fmtVND(p.amount)}</b>
-                  <span className={`badge ${p.paid ? 'ok' : 'warn'}`}>{p.paid ? 'Đã nộp' : 'Chưa nộp'}</span>
+                  <span className={`badge ${p.paid ? 'ok' : 'warn'}`}>{t(p.paid ? 'Đã nộp' : 'Chưa nộp')}</span>
                   <button className="btn-ghost btn-small" onClick={() => data.toggleTaxPaid(p.id)}>
-                    {p.paid ? 'Đánh chưa nộp' : 'Đánh đã nộp'}
+                    {t(p.paid ? 'Đánh chưa nộp' : 'Đánh đã nộp')}
                   </button>
-                  <button className="btn-ghost btn-small" onClick={() => data.deleteTaxPayment(p.id)}>Xóa</button>
+                  <button className="btn-ghost btn-small" onClick={() => data.deleteTaxPayment(p.id)}>{t('Xóa')}</button>
                 </div>
               </div>
             ))}
@@ -262,14 +264,14 @@ export default function Thue() {
       <GlassCard title="Mẫu sổ HKD hiện có (TT88/2021)">
         {ws?.tax_circular && ws.tax_circular !== 'TT88/2021' ? (
           <p className="muted" style={{ fontSize: 13 }}>
-            Đang chọn {TAX_CIRCULAR_LABELS[ws.tax_circular]}, nhưng mẫu và file Excel trong ứng dụng hiện chỉ cung cấp S1–S7-HKD theo TT88/2021.
+            {t('Đang chọn')} {t(TAX_CIRCULAR_LABELS[ws.tax_circular])}, {t('nhưng mẫu và file Excel trong ứng dụng hiện chỉ cung cấp S1–S7-HKD theo TT88/2021.')}
           </p>
         ) : null}
         <div className="row-list">
           {BOOKS.map((b) => (
             <div key={b.code} className="row-item">
-              <div><b>{b.code}</b><div className="sub">{b.name}</div></div>
-              <span className="badge">Xuất trong file Excel 7 sổ</span>
+              <div><b>{b.code}</b><div className="sub">{t(b.name)}</div></div>
+              <span className="badge">{t('Xuất trong file Excel 7 sổ')}</span>
             </div>
           ))}
         </div>
@@ -282,6 +284,7 @@ export default function Thue() {
 
 function TaxFormModal({ onClose }: { onClose: () => void }) {
   const data = useAppData();
+  const { t } = usePreferences();
   const [taxType, setTaxType] = useState<TaxKind>('VAT');
   const [period, setPeriod] = useState(quarterOf(new Date().toISOString().slice(0, 10)));
   const [amount, setAmount] = useState('');
@@ -293,7 +296,7 @@ function TaxFormModal({ onClose }: { onClose: () => void }) {
     <Modal title="Ghi khoản thuế" onClose={onClose}>
       <form onSubmit={async (e) => {
         e.preventDefault();
-        if (!amount || Number(amount) <= 0) { setErr('Số tiền phải lớn hơn 0.'); return; }
+        if (!amount || Number(amount) <= 0) { setErr(t('Số tiền phải lớn hơn 0.')); return; }
         setSaving(true);
         setErr('');
         try {
@@ -307,7 +310,7 @@ function TaxFormModal({ onClose }: { onClose: () => void }) {
         <Field label="Loại thuế">
           <select value={taxType} onChange={(e) => setTaxType(e.target.value as TaxKind)}>
             <option value="VAT">VAT</option><option value="TNCN">TNCN</option>
-            <option value="TNDN">TNDN</option><option value="other">Thuế khác</option>
+            <option value="TNDN">TNDN</option><option value="other">{t('Thuế khác')}</option>
           </select>
         </Field>
         <Field label="Kỳ (VD: Q4/2026, 11/2026, 2026)">
@@ -322,8 +325,8 @@ function TaxFormModal({ onClose }: { onClose: () => void }) {
         <Field label="Ghi chú">
           <input value={note} onChange={(e) => setNote(e.target.value)} />
         </Field>
-        {err ? <p className="error">{err}</p> : null}
-        <button type="submit" disabled={saving}>{saving ? 'Đang lưu…' : 'Lưu khoản thuế'}</button>
+        {err ? <p className="error">{t(err)}</p> : null}
+        <button type="submit" disabled={saving}>{saving ? t('Đang lưu…') : t('Lưu khoản thuế')}</button>
       </form>
     </Modal>
   );
