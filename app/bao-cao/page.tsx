@@ -207,7 +207,7 @@ export default function BaoCao() {
           });
         }
       } else {
-        const daysInYear = new Date(year + 1, 0, 0).getDate();
+        const daysInYear = Math.round((Date.UTC(year + 1, 0, 1) - Date.UTC(year, 0, 1)) / 86_400_000);
         for (let day = 0; day < daysInYear; day += 1) {
           const date = new Date(year, 0, day + 1);
           const iso = isoDate(date);
@@ -254,6 +254,16 @@ export default function BaoCao() {
     return '';
   }, [chartPeriod, chartPoints]);
 
+  const reportPeriodDescription = useMemo(() => {
+    if (chartPeriod === 'day' && chartPoints[0]) {
+      return `${t('ngày')} ${chartPoints[0].label}`;
+    }
+    if (chartPeriod === 'week') return `${t('tuần')} ${chartPeriodLabel}`;
+    if (chartPeriod === 'month') return `${t('tháng')} ${chartPeriodLabel}`;
+    if (chartPeriod === 'year-month') return `${t('năm')} ${chartPeriodLabel}`;
+    return `${t('năm')} ${chartPeriodLabel}`;
+  }, [chartPeriod, chartPeriodLabel, chartPoints, t]);
+
   const chartTotals = useMemo(() => {
     const totals: Record<ChartMetricKey, number> = {
       income: 0, expense: 0, salesProfit: 0, net: 0, transfer: 0,
@@ -284,9 +294,15 @@ export default function BaoCao() {
     () => Array.from(groupByMonth(allTxs).keys()).sort().reverse(),
     [allTxs]);
   const txs = useMemo(() => {
-    const base = allTxs.filter((t) => t.date.startsWith(month));
+    const chartKeys = new Set(chartPoints.map((point) => point.key));
+    const base = allTxs.filter((transaction) => {
+      const key = chartPeriod === 'year-month'
+        ? transaction.date.slice(0, 7)
+        : transaction.date.slice(0, 10);
+      return chartKeys.has(key);
+    });
     return typeFilter === 'all' ? base : base.filter((t) => t.type === typeFilter);
-  }, [allTxs, month, typeFilter]);
+  }, [allTxs, chartPeriod, chartPoints, typeFilter]);
 
   const transactionGroups = useMemo(() => {
     const groups = new Map<string, typeof txs>();
@@ -355,19 +371,21 @@ export default function BaoCao() {
   }, [txs, state]);
 
   const monthly = useMemo(() => {
-    const map = groupByMonth(allTxs);
+    const map = groupByMonth(txs);
     return Array.from(map.entries()).sort((a, b) => b[0].localeCompare(a[0])).map(([m, rows]) => ({
       month: m,
       income: rows.filter((r) => r.type === 'income').reduce((s, r) => s + r.amount, 0),
       expense: rows.filter((r) => r.type === 'expense').reduce((s, r) => s + r.amount, 0),
+      transfer: rows.filter((r) => r.type === 'transfer').reduce((s, r) => s + r.amount, 0),
       profit: rows.reduce((s, r) => s + (r.profit ?? 0), 0),
       count: rows.length,
     }));
-  }, [allTxs]);
+  }, [txs]);
 
   const selectedDay = chartPeriod === 'day' ? chartPoints[0]?.key : null;
   const dailyTransactions = selectedDay
     ? allTxs.filter((transaction) => transaction.date.slice(0, 10) === selectedDay)
+      .filter((transaction) => typeFilter === 'all' || transaction.type === typeFilter)
     : [];
 
   const catName = (id?: string | null) => state?.categories.find((c) => c.id === id)?.name ?? '—';
@@ -519,8 +537,8 @@ export default function BaoCao() {
         </GlassCard>
       ) : null}
 
-      <GlassCard title={`${t('Lãi theo sản phẩm')} — ${t('tháng')} ${month}`}>
-        {byProduct.length === 0 ? <p className="muted">{t('Tháng này chưa có đơn bán hàng nào từ kho.')}</p> : (
+      <GlassCard title={`${t('Lãi theo sản phẩm')} — ${reportPeriodDescription}`}>
+        {byProduct.length === 0 ? <p className="muted">{t('Khoảng thời gian này chưa có đơn bán hàng nào từ kho.')}</p> : (
           <div className="table-wrap">
             <table className="data">
               <thead><tr><th>{t('Sản phẩm')}</th><th>{t('SL bán')}</th><th>{t('Doanh thu')}</th><th>{t('Giá vốn')}</th><th>{t('Lãi')}</th></tr></thead>
@@ -539,7 +557,7 @@ export default function BaoCao() {
         )}
       </GlassCard>
 
-      <GlassCard title={`${t('Thu / chi theo danh mục')} — ${t('tháng')} ${month}`}>
+      <GlassCard title={`${t('Thu / chi theo danh mục')} — ${reportPeriodDescription}`}>
         {byCategory.length === 0 ? <p className="muted">{t('Chưa có dữ liệu.')}</p> : (
           <div className="table-wrap">
             <table className="data">
@@ -559,14 +577,14 @@ export default function BaoCao() {
         )}
       </GlassCard>
 
-      <GlassCard title="Thu / chi theo tháng">
+      <GlassCard title={`${t('Thu / chi theo tháng')} — ${reportPeriodDescription}`}>
         {monthly.length === 0 ? <p className="muted">{t('Chưa có dữ liệu.')}</p> : (
           <div className="table-wrap">
             <table className="data">
-              <thead><tr><th>{t('Tháng')}</th><th>{t('Thu')}</th><th>{t('Chi')}</th><th>{t('Lãi bán hàng')}</th><th>{t('Số GD')}</th></tr></thead>
+              <thead><tr><th>{t('Tháng')}</th><th>{t('Thu')}</th><th>{t('Chi')}</th><th>{t('Chuyển ví')}</th><th>{t('Lãi bán hàng')}</th><th>{t('Số GD')}</th></tr></thead>
               <tbody>
                 {(showAllMonths ? monthly : monthly.slice(0, 5)).map((m) => (
-                  <tr key={m.month}><td>{m.month}</td><td>{fmtVND(m.income)}</td><td>{fmtVND(m.expense)}</td><td>{fmtVND(m.profit)}</td><td>{m.count}</td></tr>
+                  <tr key={m.month}><td>{m.month}</td><td>{fmtVND(m.income)}</td><td>{fmtVND(m.expense)}</td><td>{fmtVND(m.transfer)}</td><td>{fmtVND(m.profit)}</td><td>{m.count}</td></tr>
                 ))}
               </tbody>
             </table>
@@ -579,8 +597,9 @@ export default function BaoCao() {
         )}
       </GlassCard>
 
-      <GlassCard title={`${t('Chi tiết giao dịch')} — ${t('tháng')} ${month} (${txs.length} ${t('giao dịch')})`}>
-        {txs.length === 0 ? <p className="muted">{t('Tháng này chưa có giao dịch nào.')}</p> : (
+      {chartPeriod !== 'day' ? (
+      <GlassCard title={`${t('Chi tiết giao dịch')} — ${reportPeriodDescription} (${txs.length} ${t('giao dịch')})`}>
+        {txs.length === 0 ? <p className="muted">{t('Khoảng thời gian này chưa có giao dịch nào.')}</p> : (
           <div>
             {visibleTransactionGroups.map((group) => (
               <section key={group.date} className="report-transaction-day">
@@ -612,6 +631,7 @@ export default function BaoCao() {
           </div>
         )}
       </GlassCard>
+      ) : null}
     </AppShell>
   );
 }
