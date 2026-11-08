@@ -403,16 +403,16 @@ export default function Dashboard() {
               {goals.map((g) => {
                 const pct = g.target > 0 ? Math.min(100, Math.round((g.saved / g.target) * 100)) : 0;
                 return (
-                  <div key={g.id} className="row-item" style={{ alignItems: 'flex-start' }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                        <span><b>{g.name}</b>{g.deadline ? <span className="sub"> · {t('Hạn')} {fmtDate(g.deadline)}</span> : null}</span>
-                        <span>{fmtVND(g.saved)} / {fmtVND(g.target)}</span>
+                  <div key={g.id} className="row-item savings-goal-row">
+                    <div className="savings-goal-main">
+                      <div className="savings-goal-header">
+                        <span className="savings-goal-name"><b>{g.name}</b>{g.deadline ? <span className="sub"> · {t('Hạn')} {fmtDate(g.deadline)}</span> : null}</span>
+                        <span className="savings-goal-amount">{fmtVND(g.saved)} / {fmtVND(g.target)}</span>
                       </div>
                       <div className="progress"><div style={{ width: `${pct}%` }} /></div>
                       <div className="sub">{pct}% {t('hoàn thành')}</div>
                     </div>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <div className="savings-goal-actions">
                       <button className="btn-small" onClick={() => setGoalContribution(g)}>{t('Góp tiền')}</button>
                       <button className="btn-ghost btn-small" onClick={() => setGoalEditor(g)}>{t('Sửa')}</button>
                       <button className="btn-ghost btn-small" onClick={() => {

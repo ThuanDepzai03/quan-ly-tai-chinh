@@ -485,6 +485,19 @@ select option { color: #101828; background: #fff; }
 .debt-balance-summary b { color: var(--text); }
 .debt-net-change { color: var(--muted); }
 .list-expand-button { display: block; margin: 10px auto 0; }
+.savings-goal-row { display: flex; align-items: flex-start; flex-wrap: wrap; min-width: 0; }
+.savings-goal-main { flex: 1 1 260px; min-width: 0; }
+.savings-goal-header { display: grid; grid-template-columns: minmax(90px, 1fr) minmax(120px, auto); align-items: start; gap: 8px; }
+.savings-goal-name, .savings-goal-amount { min-width: 0; }
+.savings-goal-name { overflow-wrap: anywhere; }
+.savings-goal-amount { text-align: right; overflow-wrap: anywhere; }
+.savings-goal-actions { display: flex; gap: 6px; flex-wrap: wrap; flex-shrink: 0; margin-left: auto; }
+@media (max-width: 560px) {
+  .savings-goal-row { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .savings-goal-header { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .savings-goal-amount { text-align: left; }
+  .savings-goal-actions { width: 100%; }
+}
 .debt-sections {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
   gap: 12px; align-items: stretch;
