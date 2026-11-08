@@ -79,7 +79,8 @@ export interface Product {
 }
 export interface StockMovement {
   id: string; workspace_id: string; product_id: string; variant_id?: string | null;
-  kind: 'in' | 'out'; quantity: number; imei?: string | null;
+  transaction_id?: string | null;
+  kind: 'in' | 'out'; quantity: number; imei?: string | null; imeis?: string[];
   note?: string | null; created_at: string;
 }
 export interface TaxPayment {

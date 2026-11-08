@@ -210,7 +210,7 @@ export interface AppData {
   saveCategory: (input: { id?: string; name: string; kind: 'income' | 'expense'; color: string; icon: string }) => Promise<string | null>;
   deleteCategory: (id: string) => void;
   addTransaction: (input: TxInput) => Promise<string | null>;
-  deleteTransaction: (id: string) => void;
+  deleteTransaction: (id: string) => Promise<string | null>;
   saveBudget: (categoryId: string, month: string, amount: number) => Promise<string | null>;
   deleteBudget: (id: string) => void;
   saveGoal: (input: { id?: string; name: string; target: number; saved: number; deadline?: string | null }) => Promise<string | null>;
@@ -699,8 +699,8 @@ function useAppDataState(): AppData {
       if (tx.type === 'income' && tx.product_id) {
         movements.push({
           id: uid(), workspace_id: tx.workspace_id, product_id: tx.product_id,
-          variant_id: tx.variant_id, kind: 'out', quantity: tx.quantity ?? 1,
-          imei: tx.imei, note: tx.note, created_at: tx.created_at ?? new Date().toISOString(),
+          variant_id: tx.variant_id, transaction_id: tx.id, kind: 'out', quantity: tx.quantity ?? 1,
+          imei: tx.imei, imeis: tx.imei ? [tx.imei] : [], note: tx.note, created_at: tx.created_at ?? new Date().toISOString(),
         });
       }
       return await update((prev) => {
@@ -737,10 +737,42 @@ function useAppDataState(): AppData {
       ]);
       return null;
     },
-    deleteTransaction: (id) => {
-      const p = stateRef.current; if (!p) return;
-      const tx = p.transactions.find((t) => t.id === id); if (!tx) return;
-      update((prev) => {
+    deleteTransaction: async (id) => {
+      const p = stateRef.current; if (!p) return 'Dữ liệu chưa sẵn sàng.';
+      const tx = p.transactions.find((t) => t.id === id); if (!tx) return 'Không tìm thấy giao dịch cần xóa.';
+      const relatedMovements = p.stockMovements.filter((movement) =>
+        movement.transaction_id === id
+        || (!movement.transaction_id && tx.product_id
+          && movement.product_id === tx.product_id
+          && (movement.variant_id ?? null) === (tx.variant_id ?? null)
+          && movement.kind === (tx.type === 'income' ? 'out' : 'in')
+          && movement.quantity === (tx.quantity ?? 1)
+          && (movement.imei ?? null) === (tx.imei ?? null)
+          && Boolean(tx.created_at) && movement.created_at === tx.created_at),
+      );
+      const movementIds = new Set(relatedMovements.map((movement) => movement.id));
+      const inboundByProduct = new Map<string, number>();
+      const inboundByVariant = new Map<string, number>();
+      for (const movement of relatedMovements) {
+        if (movement.kind !== 'in') continue;
+        inboundByProduct.set(movement.product_id, (inboundByProduct.get(movement.product_id) ?? 0) + movement.quantity);
+        if (movement.variant_id) {
+          inboundByVariant.set(movement.variant_id, (inboundByVariant.get(movement.variant_id) ?? 0) + movement.quantity);
+        }
+      }
+      for (const [productId, quantity] of inboundByProduct) {
+        const product = p.products.find((item) => item.id === productId);
+        if (product && product.stock < quantity) {
+          return `Không thể xóa giao dịch nhập kho vì tồn hiện tại của "${product.name}" không đủ để hoàn tác.`;
+        }
+      }
+      for (const [variantId, quantity] of inboundByVariant) {
+        const variant = p.productVariants.find((item) => item.id === variantId);
+        if (variant && variant.stock < quantity) {
+          return `Không thể xóa giao dịch nhập kho vì tồn biến thể "${variant.name}" không đủ để hoàn tác.`;
+        }
+      }
+      return await update((prev) => {
         const wallets = prev.wallets.map((w) => {
           if (w.id === tx.wallet_id) {
             // Thu: đã cộng tiền -> trừ lại; Chi/Chuyển (ví nguồn): đã trừ -> cộng lại.
@@ -755,19 +787,44 @@ function useAppDataState(): AppData {
         });
         let products = prev.products;
         let variants = prev.productVariants;
-        if (tx.type === 'income' && tx.product_id) {
+        if (relatedMovements.length > 0) {
+          for (const movement of relatedMovements) {
+            const quantityDelta = movement.kind === 'out' ? movement.quantity : -movement.quantity;
+            products = products.map((product) => (
+              product.id === movement.product_id
+                ? { ...product, stock: product.stock + quantityDelta }
+                : product
+            ));
+            variants = variants.map((variant) => {
+              if (variant.id !== movement.variant_id) return variant;
+              const imeis = movement.imeis ?? (movement.imei ? [movement.imei] : []);
+              return {
+                ...variant,
+                stock: variant.stock + quantityDelta,
+                imeis: movement.kind === 'out'
+                  ? [...new Set([...(variant.imeis ?? []), ...imeis])]
+                  : (variant.imeis ?? []).filter((imei) => !imeis.includes(imei)),
+              };
+            });
+          }
+        } else if (tx.type === 'income' && tx.product_id) {
           const q = tx.quantity ?? 1;
           products = products.map((x) => (x.id === tx.product_id ? { ...x, stock: x.stock + q } : x));
-          variants = variants.map((v) => {
-            if (v.id !== tx.variant_id) return v;
-            return { ...v, stock: v.stock + q, imeis: tx.imei ? [...(v.imeis ?? []), tx.imei] : v.imeis };
-          });
+          variants = variants.map((v) => (
+            v.id === tx.variant_id
+              ? { ...v, stock: v.stock + q, imeis: tx.imei ? [...new Set([...(v.imeis ?? []), tx.imei])] : v.imeis }
+              : v
+          ));
         }
         return {
           ...prev, wallets, products, productVariants: variants,
           transactions: prev.transactions.filter((t) => t.id !== id),
+          stockMovements: prev.stockMovements.filter((movement) => !movementIds.has(movement.id)),
         };
-      }, [cloudDelete('transactions', id)]);
+      }, [
+        ...relatedMovements.map((movement) => cloudDelete('stock_movements', movement.id)),
+        cloudDelete('transactions', id),
+      ]);
     },
     deleteBudget: (id) => update((p) => ({ ...p, budgets: p.budgets.filter((b) => b.id !== id) }), [cloudDelete('budgets', id)]),
     saveBudget: (categoryId, month, amount) => {
@@ -972,8 +1029,8 @@ function useAppDataState(): AppData {
       };
       const movement: StockMovement = {
         id: uid(), workspace_id: p.currentWorkspaceId, product_id: input.product_id,
-        variant_id: input.variant_id ?? null, kind: 'in', quantity: input.quantity,
-        imei: null, note: tx.note, created_at: tx.created_at ?? new Date().toISOString(),
+        variant_id: input.variant_id ?? null, transaction_id: tx.id, kind: 'in', quantity: input.quantity,
+        imei: null, imeis: input.imeis ?? [], note: tx.note, created_at: tx.created_at ?? new Date().toISOString(),
       };
       return await update((prev) => ({
         ...prev,

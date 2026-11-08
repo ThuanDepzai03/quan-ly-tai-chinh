@@ -111,4 +111,5 @@ Chi + dời kỳ. Mọi thay đổi state ở chế độ cloud đều đồng b
 lên Supabase (trước đây ví/kho/mục tiêu/nợ/nhắc nhở chỉ lưu local).
 Chạy lại `supabase/schema.sql` trong SQL Editor để thêm các cột mới
 (transactions.to_wallet_id, transactions.receipt_image, products.image,
-workspaces.tncn_deduction) — file dùng IF NOT EXISTS nên chạy lại an toàn.
+workspaces.tncn_deduction, stock_movements.transaction_id và stock_movements.imeis)
+— file dùng IF NOT EXISTS nên chạy lại an toàn.

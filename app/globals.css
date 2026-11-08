@@ -215,6 +215,14 @@ select option { color: #101828; background: #fff; }
   .row-item > div:first-child { min-width: 0; overflow-wrap: anywhere; }
   .row-item .sub { overflow-wrap: anywhere; line-height: 1.45; }
   .row-item > button { flex: 0 0 auto; }
+  .inventory-product-row { flex-wrap: wrap; }
+  .inventory-product-details { flex: 1 1 100%; }
+  .inventory-product-row-with-image .inventory-product-details { flex-basis: calc(100% - 68px); }
+  .inventory-product-actions {
+    display: grid !important; flex: 1 0 100%; grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px !important;
+  }
+  .inventory-product-actions button { min-height: 40px; }
   .dashboard-wallet-actions { min-width: 0; flex-wrap: wrap; justify-content: flex-end; }
   .dashboard-wallet-actions > b { white-space: nowrap; }
   .dashboard-reminder { align-items: flex-start; gap: 8px; padding: 11px; }
@@ -320,6 +328,7 @@ select option { color: #101828; background: #fff; }
 .row-item:nth-child(4n + 3) { --row-accent: 52, 211, 153; }
 .row-item:nth-child(4n + 4) { --row-accent: 251, 191, 36; }
 .row-item .sub { font-size: 13px; color: var(--muted); }
+.inventory-product-details { flex: 1; }
 .debt-history-list { gap: 5px; }
 .debt-history-item {
   display: flex; justify-content: space-between; align-items: center; gap: 12px;

@@ -39,6 +39,7 @@ export default function Dashboard() {
   const [showWallet, setShowWallet] = useState(false);
   const [editWallet, setEditWallet] = useState<Wallet | null>(null);
   const [confirmDeleteTx, setConfirmDeleteTx] = useState<string | null>(null);
+  const [deleteTxError, setDeleteTxError] = useState('');
   const [goalEditor, setGoalEditor] = useState<Goal | 'new' | null>(null);
   const [goalContribution, setGoalContribution] = useState<Goal | null>(null);
   const [debtEditor, setDebtEditor] = useState<Debt | 'new-borrow' | 'new-lend' | null>(null);
@@ -324,7 +325,7 @@ export default function Dashboard() {
                     {t.receipt_image ? ' • 🧾 có hóa đơn' : ''}
                   </div>
                 </div>
-                <button className="btn-ghost btn-small" onClick={() => setConfirmDeleteTx(t.id)}>Xóa</button>
+                <button className="btn-ghost btn-small" onClick={() => { setDeleteTxError(''); setConfirmDeleteTx(t.id); }}>Xóa</button>
               </div>
             ))}
           </div>
@@ -452,11 +453,16 @@ export default function Dashboard() {
         />
       ) : null}
       {confirmDeleteTx ? (
-        <Modal title="Xóa giao dịch?" onClose={() => setConfirmDeleteTx(null)}>
-          <p>Giao dịch bán hàng bị xóa sẽ hoàn lại tồn kho và số dư ví. Bạn chắc chắn muốn xóa?</p>
+        <Modal title="Xóa giao dịch?" onClose={() => { setConfirmDeleteTx(null); setDeleteTxError(''); }}>
+          <p>Giao dịch liên quan đến kho sẽ hoàn tác tồn kho và lịch sử nhập / xuất; số dư ví cũng được hoàn lại. Bạn chắc chắn muốn xóa?</p>
+          {deleteTxError ? <p className="error">{deleteTxError}</p> : null}
           <div className="flex-row">
-            <button className="btn-danger" onClick={() => { data.deleteTransaction(confirmDeleteTx); setConfirmDeleteTx(null); }}>Xóa giao dịch</button>
-            <button className="btn-secondary" onClick={() => setConfirmDeleteTx(null)}>Hủy</button>
+            <button className="btn-danger" onClick={async () => {
+              const error = await data.deleteTransaction(confirmDeleteTx);
+              if (error) { setDeleteTxError(error); return; }
+              setConfirmDeleteTx(null);
+            }}>Xóa giao dịch</button>
+            <button className="btn-secondary" onClick={() => { setConfirmDeleteTx(null); setDeleteTxError(''); }}>Hủy</button>
           </div>
         </Modal>
       ) : null}

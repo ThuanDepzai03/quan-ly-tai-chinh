@@ -150,9 +150,11 @@ create table if not exists stock_movements (
   workspace_id uuid references workspaces(id) on delete cascade,
   product_id uuid references products(id) on delete cascade,
   variant_id uuid references product_variants(id) on delete set null,
+  transaction_id uuid references transactions(id) on delete cascade,
   kind text not null check (kind in ('in','out')),
   quantity numeric not null,
   imei text,
+  imeis text[] not null default '{}',
   note text,
   created_at timestamptz default now()
 );
@@ -331,9 +333,11 @@ alter table stock_movements
   add column if not exists workspace_id uuid references workspaces(id) on delete cascade,
   add column if not exists product_id uuid references products(id) on delete cascade,
   add column if not exists variant_id uuid references product_variants(id) on delete set null,
+  add column if not exists transaction_id uuid references transactions(id) on delete cascade,
   add column if not exists kind text not null default 'in',
   add column if not exists quantity numeric not null default 0,
   add column if not exists imei text,
+  add column if not exists imeis text[] not null default '{}',
   add column if not exists note text,
   add column if not exists created_at timestamptz default now();
 alter table tax_payments

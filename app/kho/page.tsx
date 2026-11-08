@@ -101,7 +101,7 @@ export default function Kho() {
               const vs = productVariants(p.id);
               const low = p.stock <= p.min_stock;
               return (
-                <div key={p.id} className="row-item" style={{ alignItems: 'flex-start' }}>
+                <div key={p.id} className={`row-item inventory-product-row${p.image ? ' inventory-product-row-with-image' : ''}`} style={{ alignItems: 'flex-start' }}>
                   {p.image ? (
                     <img
                       src={p.image}
@@ -113,7 +113,7 @@ export default function Kho() {
                       style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 12, flexShrink: 0 }}
                     />
                   ) : null}
-                  <div style={{ flex: 1 }}>
+                  <div className="inventory-product-details">
                     <b>{p.name}</b>{' '}
                     <span className="badge">{catName(p.category_id)}</span>{' '}
                     {low ? <span className="badge danger">Sắp hết hàng</span> : null}
@@ -128,7 +128,7 @@ export default function Kho() {
                       </div>
                     ) : null}
                   </div>
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <div className="inventory-product-actions" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     <button className="btn-small" onClick={() => setSellProduct(p)}>Bán</button>
                     <button className="btn-ghost btn-small" onClick={() => setImportProduct(p)}>Nhập kho</button>
                     <button className="btn-ghost btn-small" onClick={() => openEdit(p)}>Sửa</button>
