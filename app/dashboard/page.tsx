@@ -76,6 +76,14 @@ export default function Dashboard() {
         new Date(transactionDateTime(b)).getTime() - new Date(transactionDateTime(a)).getTime()),
     [state, wsId]);
   const displayedTransactions = showAllTransactions ? txs : txs.slice(0, 5);
+  const displayedTransactionGroups = useMemo(() => {
+    const groups = new Map<string, typeof displayedTransactions>();
+    for (const transaction of displayedTransactions) {
+      const date = transaction.date.slice(0, 10);
+      groups.set(date, [...(groups.get(date) ?? []), transaction]);
+    }
+    return Array.from(groups.entries()).map(([date, transactions]) => ({ date, transactions }));
+  }, [displayedTransactions]);
   const displayedWallets = showAllWallets ? wallets : wallets.slice(0, 5);
   const month = monthISO();
   const monthTxs = useMemo(
@@ -231,7 +239,22 @@ export default function Dashboard() {
           <div><span>↓ {t('Thu tháng này')}</span><strong>{fmtVND(income)}</strong></div>
           <div><span>↑ {t('Chi tháng này')}</span><strong>{fmtVND(expense)}</strong></div>
           <div><span>{t('Dòng tiền ròng')}</span><strong>{netCashflow >= 0 ? '+' : '−'}{fmtVND(Math.abs(netCashflow))}</strong></div>
-          <div><span>{t('Thu nhập hôm nay (thu − chi)')}</span><strong>{todayNet >= 0 ? '+' : '−'}{fmtVND(Math.abs(todayNet))}</strong></div>
+          <div
+            className="balance-breakdown-link"
+            role="link"
+            tabIndex={0}
+            aria-label={`${t('Thu nhập hôm nay (thu − chi)')}: ${fmtVND(Math.abs(todayNet))}`}
+            onClick={() => router.push(`/bao-cao?date=${today}&period=day`)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                router.push(`/bao-cao?date=${today}&period=day`);
+              }
+            }}
+          >
+            <span>{t('Thu nhập hôm nay (thu − chi)')}</span>
+            <strong>{todayNet >= 0 ? '+' : '−'}{fmtVND(Math.abs(todayNet))}</strong>
+          </div>
         </div>
       </section>
 
@@ -314,22 +337,29 @@ export default function Dashboard() {
         <button className="btn-small" onClick={() => setShowTx(true)}>{t('+ Thêm giao dịch')}</button>
       }>
         {txs.length === 0 ? <p className="muted">{t('Chưa có giao dịch — bấm “Thêm giao dịch” để ghi Thu/Chi đầu tiên.')}</p> : (
-          <div className="row-list">
-            {displayedTransactions.map((tx) => (
-              <div key={tx.id} className="row-item">
-                <div>
-                  <b style={{ color: tx.type === 'income' ? '#34c759' : tx.type === 'expense' ? '#ff3b30' : '#0a84ff' }}>
-                    {tx.type === 'income' ? '+' : tx.type === 'expense' ? '−' : '⇄'} {fmtVND(tx.amount)}
-                  </b>
-                  <div className="sub">
-                    {fmtDate(tx.date)} {new Date(transactionDateTime(tx)).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} • {catName(tx.category_id)} • {walletName(tx.wallet_id)}
-                    {tx.profit ? ` • ${t('Lãi')} ${fmtVND(tx.profit)}` : ''}{tx.note ? ` • ${tx.note}` : ''}
-                    {tx.tax_type ? ` • ${taxLabel} ${tx.tax_type}${tx.tax_rate ? ` ${(tx.tax_rate * 100).toLocaleString('vi-VN')}%` : ''}` : ''}
-                    {tx.receipt_image ? ` • 🧾 ${t('có hóa đơn')}` : ''}
+          <div className="report-transaction-groups">
+            {displayedTransactionGroups.map((group) => (
+              <section key={group.date} className="report-transaction-day">
+                <div className="report-transaction-date">{fmtDate(group.date)}</div>
+                <div className="report-transaction-list">
+                  {group.transactions.map((tx) => (
+                    <div key={tx.id} className="row-item report-transaction-row">
+                      <div>
+                        <b style={{ color: tx.type === 'income' ? '#34c759' : tx.type === 'expense' ? '#ff3b30' : '#0a84ff' }}>
+                          {tx.type === 'income' ? '+' : tx.type === 'expense' ? '−' : '⇄'} {fmtVND(tx.amount)}
+                        </b>
+                        <div className="sub">
+                          {new Date(transactionDateTime(tx)).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} • {catName(tx.category_id)} • {walletName(tx.wallet_id)}
+                          {tx.profit ? ` • ${t('Lãi')} ${fmtVND(tx.profit)}` : ''}{tx.note ? ` • ${tx.note}` : ''}
+                          {tx.tax_type ? ` • ${taxLabel} ${tx.tax_type}${tx.tax_rate ? ` ${(tx.tax_rate * 100).toLocaleString('vi-VN')}%` : ''}` : ''}
+                          {tx.receipt_image ? ` • 🧾 ${t('có hóa đơn')}` : ''}
+                        </div>
+                      </div>
+                      <button className="btn-ghost btn-small" onClick={() => { setDeleteTxError(''); setConfirmDeleteTx(tx.id); }}>{t('Xóa')}</button>
+                    </div>
+                  ))}
                   </div>
-                </div>
-                <button className="btn-ghost btn-small" onClick={() => { setDeleteTxError(''); setConfirmDeleteTx(tx.id); }}>{t('Xóa')}</button>
-              </div>
+              </section>
             ))}
           </div>
         )}

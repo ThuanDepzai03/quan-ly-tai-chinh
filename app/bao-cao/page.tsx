@@ -1,5 +1,5 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import AppShell from '@/components/AppShell';
 import GlassCard, { StatCard } from '@/components/GlassCard';
 import { useAppData } from '@/lib/data';
@@ -10,7 +10,7 @@ import { BUSINESS_TYPE_LABELS, TAX_CALCULATION_METHOD_LABELS } from '@/lib/types
 import { defaultTaxMethod, inferBusinessType, TAX_RULES_2026 } from '@/lib/tax-config';
 import { usePreferences } from '@/lib/preferences';
 
-type ChartPeriod = 'week' | 'month' | 'year-month' | 'year-day';
+type ChartPeriod = 'day' | 'week' | 'month' | 'year-month' | 'year-day';
 type ChartMetricKey = 'income' | 'expense' | 'salesProfit' | 'net' | 'transfer';
 type ChartPoint = {
   key: string;
@@ -137,6 +137,23 @@ export default function BaoCao() {
   const [typeFilter, setTypeFilter] = useState<'all' | 'income' | 'expense'>('all');
   const [chartPeriod, setChartPeriod] = useState<ChartPeriod>('month');
   const [chartOffset, setChartOffset] = useState(0);
+  const [showAllProducts, setShowAllProducts] = useState(false);
+  const [showAllCategories, setShowAllCategories] = useState(false);
+  const [showAllMonths, setShowAllMonths] = useState(false);
+  const [showAllTransactions, setShowAllTransactions] = useState(false);
+
+  useEffect(() => {
+    const search = new URLSearchParams(window.location.search);
+    const initialDate = search.get('date');
+    if (!initialDate || !/^\d{4}-\d{2}-\d{2}$/.test(initialDate)) return;
+    const target = new Date(`${initialDate}T00:00:00`);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (Number.isNaN(target.getTime())) return;
+    setMonth(initialDate.slice(0, 7));
+    if (search.get('period') === 'day') setChartPeriod('day');
+    setChartOffset(Math.round((target.getTime() - today.getTime()) / 86_400_000));
+  }, []);
 
   const wsId = state?.currentWorkspaceId ?? null;
   const allTxs = useMemo(
@@ -145,7 +162,16 @@ export default function BaoCao() {
   const chartPoints = useMemo(() => {
     const today = new Date();
     const points: ChartPoint[] = [];
-    if (chartPeriod === 'week') {
+    if (chartPeriod === 'day') {
+      const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() + chartOffset);
+      const iso = isoDate(date);
+      points.push({
+        key: iso,
+        label: formatReportDate(iso, locale),
+        axisLabel: formatReportDate(iso, locale),
+        income: 0, expense: 0, salesProfit: 0, net: 0, transfer: 0,
+      });
+    } else if (chartPeriod === 'week') {
       const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
       start.setDate(start.getDate() - ((start.getDay() + 6) % 7) + chartOffset * 7);
       for (let day = 0; day < 7; day += 1) {
@@ -218,6 +244,7 @@ export default function BaoCao() {
     if (chartPoints.length === 0) return '';
     const first = chartPoints[0];
     const last = chartPoints[chartPoints.length - 1];
+    if (chartPeriod === 'day') return first.label;
     if (chartPeriod === 'week') return `${first.label} – ${last.label}`;
     if (chartPeriod === 'month') {
       const [year, monthIndex] = first.key.split('-');
@@ -260,6 +287,24 @@ export default function BaoCao() {
     const base = allTxs.filter((t) => t.date.startsWith(month));
     return typeFilter === 'all' ? base : base.filter((t) => t.type === typeFilter);
   }, [allTxs, month, typeFilter]);
+
+  const transactionGroups = useMemo(() => {
+    const groups = new Map<string, typeof txs>();
+    for (const transaction of [...txs].sort((a, b) => b.date.localeCompare(a.date))) {
+      const date = transaction.date.slice(0, 10);
+      groups.set(date, [...(groups.get(date) ?? []), transaction]);
+    }
+    return Array.from(groups.entries()).map(([date, transactions]) => ({ date, transactions }));
+  }, [txs]);
+  const visibleTransactionGroups = useMemo(() => {
+    const visibleIds = new Set((showAllTransactions ? txs : txs.slice(0, 5)).map((transaction) => transaction.id));
+    return transactionGroups
+      .map((group) => ({
+        ...group,
+        transactions: group.transactions.filter((transaction) => visibleIds.has(transaction.id)),
+      }))
+      .filter((group) => group.transactions.length > 0);
+  }, [showAllTransactions, transactionGroups, txs]);
 
   const income = txs.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0);
   const expense = txs.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
@@ -319,6 +364,11 @@ export default function BaoCao() {
       count: rows.length,
     }));
   }, [allTxs]);
+
+  const selectedDay = chartPeriod === 'day' ? chartPoints[0]?.key : null;
+  const dailyTransactions = selectedDay
+    ? allTxs.filter((transaction) => transaction.date.slice(0, 10) === selectedDay)
+    : [];
 
   const catName = (id?: string | null) => state?.categories.find((c) => c.id === id)?.name ?? '—';
   const walletName = (id: string) => state?.wallets.find((w) => w.id === id)?.name ?? '—';
@@ -394,6 +444,7 @@ export default function BaoCao() {
         <div className="report-chart-controls">
           <div className="report-period-buttons" role="group" aria-label={t('Khoảng thời gian biểu đồ')}>
             {([
+              ['day', t('Ngày')],
               ['week', t('Tuần')],
               ['month', t('Tháng')],
               ['year-month', t('Năm · tháng')],
@@ -445,17 +496,45 @@ export default function BaoCao() {
         </div>
       </GlassCard>
 
+      {chartPeriod === 'day' ? (
+        <GlassCard title={`${t('Chi tiết giao dịch')} — ${formatReportDate(selectedDay ?? '', locale)} (${dailyTransactions.length} ${t('giao dịch')})`}>
+          {dailyTransactions.length === 0 ? <p className="muted">{t('Ngày này chưa có giao dịch nào.')}</p> : (
+            <div className="report-transaction-list">
+              {dailyTransactions.map((transaction) => (
+                <div key={transaction.id} className="row-item report-transaction-row">
+                  <div>
+                    <b className={`transaction-amount transaction-amount-${transaction.type}`}>
+                      {transaction.type === 'income' ? '+' : transaction.type === 'expense' ? '−' : '⇄'} {fmtVND(transaction.amount)}
+                    </b>
+                    <div className="sub">
+                      {formatReportDate(transaction.date, locale)} • {catName(transaction.category_id)} • {walletName(transaction.wallet_id)}
+                      {transaction.product_id ? ` • ${productName(transaction)}${transaction.quantity && transaction.quantity > 1 ? ` ×${transaction.quantity}` : ''}` : ''}
+                    </div>
+                  </div>
+                  <div>{t(transaction.type === 'income' ? 'Thu' : transaction.type === 'expense' ? 'Chi' : 'Chuyển ví')}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </GlassCard>
+      ) : null}
+
       <GlassCard title={`${t('Lãi theo sản phẩm')} — ${t('tháng')} ${month}`}>
         {byProduct.length === 0 ? <p className="muted">{t('Tháng này chưa có đơn bán hàng nào từ kho.')}</p> : (
           <div className="table-wrap">
             <table className="data">
               <thead><tr><th>{t('Sản phẩm')}</th><th>{t('SL bán')}</th><th>{t('Doanh thu')}</th><th>{t('Giá vốn')}</th><th>{t('Lãi')}</th></tr></thead>
               <tbody>
-                {byProduct.map((r) => (
+                {(showAllProducts ? byProduct : byProduct.slice(0, 5)).map((r) => (
                   <tr key={r.name}><td>{r.name}</td><td>{r.qty}</td><td>{fmtVND(r.revenue)}</td><td>{fmtVND(r.cost)}</td><td><b style={{ color: '#34c759' }}>{fmtVND(r.profit)}</b></td></tr>
                 ))}
               </tbody>
             </table>
+            {byProduct.length > 5 ? (
+              <button className="btn-ghost btn-small report-show-more" onClick={() => setShowAllProducts((value) => !value)}>
+                {showAllProducts ? t('Thu gọn') : `${t('Xem thêm')} (${byProduct.length - 5})`}
+              </button>
+            ) : null}
           </div>
         )}
       </GlassCard>
@@ -466,11 +545,16 @@ export default function BaoCao() {
             <table className="data">
               <thead><tr><th>{t('Danh mục')}</th><th>{t('Thu')}</th><th>{t('Chi')}</th><th>{t('Chênh lệch')}</th></tr></thead>
               <tbody>
-                {byCategory.map((r) => (
+                {(showAllCategories ? byCategory : byCategory.slice(0, 5)).map((r) => (
                   <tr key={r.name}><td>{r.name}</td><td>{fmtVND(r.income)}</td><td>{fmtVND(r.expense)}</td><td>{fmtVND(r.income - r.expense)}</td></tr>
                 ))}
               </tbody>
             </table>
+            {byCategory.length > 5 ? (
+              <button className="btn-ghost btn-small report-show-more" onClick={() => setShowAllCategories((value) => !value)}>
+                {showAllCategories ? t('Thu gọn') : `${t('Xem thêm')} (${byCategory.length - 5})`}
+              </button>
+            ) : null}
           </div>
         )}
       </GlassCard>
@@ -481,34 +565,50 @@ export default function BaoCao() {
             <table className="data">
               <thead><tr><th>{t('Tháng')}</th><th>{t('Thu')}</th><th>{t('Chi')}</th><th>{t('Lãi bán hàng')}</th><th>{t('Số GD')}</th></tr></thead>
               <tbody>
-                {monthly.map((m) => (
+                {(showAllMonths ? monthly : monthly.slice(0, 5)).map((m) => (
                   <tr key={m.month}><td>{m.month}</td><td>{fmtVND(m.income)}</td><td>{fmtVND(m.expense)}</td><td>{fmtVND(m.profit)}</td><td>{m.count}</td></tr>
                 ))}
               </tbody>
             </table>
+            {monthly.length > 5 ? (
+              <button className="btn-ghost btn-small report-show-more" onClick={() => setShowAllMonths((value) => !value)}>
+                {showAllMonths ? t('Thu gọn') : `${t('Xem thêm')} (${monthly.length - 5})`}
+              </button>
+            ) : null}
           </div>
         )}
       </GlassCard>
 
       <GlassCard title={`${t('Chi tiết giao dịch')} — ${t('tháng')} ${month} (${txs.length} ${t('giao dịch')})`}>
         {txs.length === 0 ? <p className="muted">{t('Tháng này chưa có giao dịch nào.')}</p> : (
-          <div className="table-wrap">
-            <table className="data">
-              <thead><tr><th>{t('Ngày')}</th><th>{t('Loại')}</th><th>{t('Danh mục')}</th><th>{t('Sản phẩm')}</th><th>{t('Số tiền')}</th><th>{t('Lãi')}</th><th>{t('Ví')}</th></tr></thead>
-              <tbody>
-                {txs.map((tx) => (
-                  <tr key={tx.id}>
-                    <td>{formatReportDate(tx.date, locale)}</td>
-                    <td>{t(tx.type === 'income' ? 'Thu' : tx.type === 'expense' ? 'Chi' : 'Chuyển ví')}</td>
-                    <td>{catName(tx.category_id)}</td>
-                    <td>{productName(tx)}{tx.quantity && tx.quantity > 1 ? ` ×${tx.quantity}` : ''}</td>
-                    <td>{fmtVND(tx.amount)}</td>
-                    <td>{tx.profit ? fmtVND(tx.profit) : '—'}</td>
-                    <td>{walletName(tx.wallet_id)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div>
+            {visibleTransactionGroups.map((group) => (
+              <section key={group.date} className="report-transaction-day">
+                <div className="report-transaction-date">{formatReportDate(group.date, locale)}</div>
+                <div className="report-transaction-list">
+                  {group.transactions.map((tx) => (
+                    <div key={tx.id} className="row-item report-transaction-row">
+                      <div>
+                        <b className={`transaction-amount transaction-amount-${tx.type}`}>
+                          {tx.type === 'income' ? '+' : tx.type === 'expense' ? '−' : '⇄'} {fmtVND(tx.amount)}
+                        </b>
+                        <div className="sub">
+                          {catName(tx.category_id)} • {walletName(tx.wallet_id)}
+                          {tx.product_id ? ` • ${productName(tx)}${tx.quantity && tx.quantity > 1 ? ` ×${tx.quantity}` : ''}` : ''}
+                          {tx.profit ? ` • ${t('Lãi')} ${fmtVND(tx.profit)}` : ''}
+                        </div>
+                      </div>
+                      <div>{t(tx.type === 'income' ? 'Thu' : tx.type === 'expense' ? 'Chi' : 'Chuyển ví')}</div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ))}
+            {txs.length > 5 ? (
+              <button className="btn-ghost btn-small report-show-more" onClick={() => setShowAllTransactions((value) => !value)}>
+                {showAllTransactions ? t('Thu gọn') : `${t('Xem thêm')} (${txs.length - 5})`}
+              </button>
+            ) : null}
           </div>
         )}
       </GlassCard>

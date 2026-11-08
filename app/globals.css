@@ -318,6 +318,12 @@ select option { color: #101828; background: #fff; }
 :root[data-theme="light"] table.data th { background: #edf2f8; color: #344158; }
 :root[data-theme="light"] table.data td { border-color: rgba(31, 51, 82, .1); }
 :root[data-theme="light"] table.data tbody tr:nth-child(even) { background: rgba(31, 51, 82, .035); }
+:root[data-theme="light"] .home-title {
+  background: none;
+  -webkit-text-fill-color: currentColor;
+  color: #15304a;
+}
+:root[data-theme="light"] .home-tagline { color: #40566f; }
 :root[data-theme="light"] .profit-box {
   border-color: rgba(22, 132, 66, .22);
   background: rgba(22, 132, 66, .07);
@@ -378,6 +384,9 @@ select option { color: #101828; background: #fff; }
   display: grid; gap: 5px; min-width: 0; padding: 12px 14px; border-radius: 18px;
   background: rgba(255,255,255,.18);
 }
+.balance-breakdown > .balance-breakdown-link { cursor: pointer; outline: none; }
+.balance-breakdown > .balance-breakdown-link:hover,
+.balance-breakdown > .balance-breakdown-link:focus-visible { background: rgba(255,255,255,.28); }
 .balance-breakdown span { color: rgba(255,255,255,.8); font-size: 12px; font-weight: 600; }
 .balance-breakdown strong { overflow: hidden; color: #fff; font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
 .quick-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 14px 0 20px; }
@@ -751,6 +760,19 @@ table.data tbody tr:hover { background: rgba(79, 131, 255, .09); }
 .report-period-buttons, .report-period-nav { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .report-period-nav { color: var(--muted); font-size: 13px; font-weight: 650; }
 .report-period-nav span { min-width: 128px; text-align: center; }
+.report-show-more { display: block; margin: 10px auto 0; }
+.report-transaction-list { display: grid; gap: 8px; }
+.report-transaction-day { margin-top: 14px; }
+.report-transaction-day:first-child { margin-top: 0; }
+.report-transaction-day + .report-transaction-day { margin-top: 18px; }
+.report-transaction-date {
+  margin-bottom: 7px; color: var(--text); font-size: 13px; font-weight: 800;
+}
+.report-transaction-row { min-height: 58px; }
+.transaction-amount { font-size: 15px; }
+.transaction-amount-income { color: #34c759; }
+.transaction-amount-expense { color: #ff3b30; }
+.transaction-amount-transfer { color: #0a84ff; }
 .report-chart-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .report-chart-card {
   min-width: 0; padding: 14px; border: 1px solid; border-radius: 18px;
