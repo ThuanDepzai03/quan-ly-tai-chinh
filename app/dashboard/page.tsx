@@ -75,6 +75,27 @@ export default function Dashboard() {
       .sort((a, b) =>
         new Date(transactionDateTime(b)).getTime() - new Date(transactionDateTime(a)).getTime()),
     [state, wsId]);
+  const transactionBalances = useMemo(() => {
+    const balances = new Map(wallets.map((wallet) => [wallet.id, wallet.balance]));
+    const afterTransaction = new Map<string, { wallet?: number; toWallet?: number }>();
+
+    for (const tx of txs) {
+      const walletBalance = balances.get(tx.wallet_id);
+      const toWalletBalance = tx.type === 'transfer' && tx.to_wallet_id
+        ? balances.get(tx.to_wallet_id)
+        : undefined;
+      afterTransaction.set(tx.id, { wallet: walletBalance, toWallet: toWalletBalance });
+
+      if (walletBalance !== undefined) {
+        balances.set(tx.wallet_id, walletBalance + (tx.type === 'income' ? -tx.amount : tx.amount));
+      }
+      if (tx.type === 'transfer' && tx.to_wallet_id && toWalletBalance !== undefined) {
+        balances.set(tx.to_wallet_id, toWalletBalance - tx.amount);
+      }
+    }
+
+    return afterTransaction;
+  }, [txs, wallets]);
   const displayedTransactions = showAllTransactions ? txs : txs.slice(0, 5);
   const displayedTransactionGroups = useMemo(() => {
     const groups = new Map<string, typeof displayedTransactions>();
@@ -342,22 +363,37 @@ export default function Dashboard() {
               <section key={group.date} className="report-transaction-day">
                 <div className="report-transaction-date">{fmtDate(group.date)}</div>
                 <div className="report-transaction-list">
-                  {group.transactions.map((tx) => (
-                    <div key={tx.id} className="row-item report-transaction-row">
-                      <div>
-                        <b style={{ color: tx.type === 'income' ? '#34c759' : tx.type === 'expense' ? '#ff3b30' : '#0a84ff' }}>
-                          {tx.type === 'income' ? '+' : tx.type === 'expense' ? '−' : '⇄'} {fmtVND(tx.amount)}
-                        </b>
-                        <div className="sub">
-                          {new Date(transactionDateTime(tx)).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} • {catName(tx.category_id)} • {walletName(tx.wallet_id)}
-                          {tx.profit ? ` • ${t('Lãi')} ${fmtVND(tx.profit)}` : ''}{tx.note ? ` • ${tx.note}` : ''}
-                          {tx.tax_type ? ` • ${taxLabel} ${tx.tax_type}${tx.tax_rate ? ` ${(tx.tax_rate * 100).toLocaleString('vi-VN')}%` : ''}` : ''}
-                          {tx.receipt_image ? ` • 🧾 ${t('có hóa đơn')}` : ''}
+                  {group.transactions.map((tx) => {
+                    const balance = transactionBalances.get(tx.id);
+                    return (
+                      <div key={tx.id} className="row-item report-transaction-row">
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '4px 12px' }}>
+                            <b style={{ color: tx.type === 'income' ? '#34c759' : tx.type === 'expense' ? '#ff3b30' : '#0a84ff' }}>
+                              {tx.type === 'income' ? '+' : tx.type === 'expense' ? '−' : '⇄'} {fmtVND(tx.amount)}
+                            </b>
+                            {tx.type === 'transfer' && balance?.wallet !== undefined ? (
+                              <span className="sub">
+                                {fmtVND(balance.wallet)}
+                                {balance.toWallet !== undefined ? ` → ${fmtVND(balance.toWallet)}` : ''}
+                              </span>
+                            ) : null}
+                            {tx.type !== 'transfer' && balance?.wallet !== undefined ? (
+                              <span className="sub">{fmtVND(balance.wallet)}</span>
+                            ) : null}
+                          </div>
+                          <div className="sub">
+                            {new Date(transactionDateTime(tx)).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} • {catName(tx.category_id)} • {walletName(tx.wallet_id)}
+                            {tx.type === 'transfer' && tx.to_wallet_id ? ` → ${walletName(tx.to_wallet_id)}` : ''}
+                            {tx.profit ? ` • ${t('Lãi')} ${fmtVND(tx.profit)}` : ''}{tx.note ? ` • ${tx.note}` : ''}
+                            {tx.tax_type ? ` • ${taxLabel} ${tx.tax_type}${tx.tax_rate ? ` ${(tx.tax_rate * 100).toLocaleString('vi-VN')}%` : ''}` : ''}
+                            {tx.receipt_image ? ` • 🧾 ${t('có hóa đơn')}` : ''}
+                          </div>
                         </div>
+                        <button className="btn-ghost btn-small" onClick={() => { setDeleteTxError(''); setConfirmDeleteTx(tx.id); }}>{t('Xóa')}</button>
                       </div>
-                      <button className="btn-ghost btn-small" onClick={() => { setDeleteTxError(''); setConfirmDeleteTx(tx.id); }}>{t('Xóa')}</button>
-                    </div>
-                  ))}
+                    );
+                  })}
                   </div>
               </section>
             ))}
